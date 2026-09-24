@@ -95,3 +95,12 @@ Cubre compras por mínimos, consumo único y atómico, falta de existencias, aju
 ## Pruebas
 
 `npm test` verifica cálculos, consistencia de datos y fotos locales, descuentos atómicos, compras por mínimo, checklists incompletos/hallazgos/horómetro y rangos válidos de calendario. La carga temporal de archivos y la eliminación al recargar también se verifican en navegador.
+
+
+## Expediente documental por grúa
+
+Cada equipo tiene un expediente accesible desde **Flota y expedientes → Ver expediente**. Las 15 grúas incluyen 60 documentos ficticios: seguro, certificación de inspección, certificación de prueba de carga y tarjeta de circulación municipal. Cada documento registra emisor, póliza/folio, emisión, vencimiento y observaciones. Se pueden editar o agregar documentos por equipo.
+
+Las vigencias se calculan respecto a la fecha local del navegador: vigente a más de 30 días, por vencer entre 0 y 30 días inclusive, y vencido desde el día siguiente al vencimiento. Se validan fechas reales y que el vencimiento no sea anterior a la emisión. El resumen de la flota y las fichas se actualizan al guardar; no se crean notificaciones externas.
+
+Se puede adjuntar un PDF o imagen JPG/PNG/WebP de hasta 10 MB. Los adjuntos son opcionales, se mantienen mediante URLs de objetos locales y solo se descargan por acción del usuario. Reemplazar, quitar o cancelar libera los archivos temporales correspondientes. Datos y adjuntos se reinician al recargar; no se suben a Vercel. Los ejemplos no representan pólizas, certificaciones ni permisos reales.

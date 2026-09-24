@@ -1,3 +1,4 @@
+import { createEquipmentDocuments } from "./equipment-documents.js";
 import { createChecklists } from "./checklists.js";
 import { createExecutive } from "./executive.js";
 import { initialEvents } from "./executive-model.js";
@@ -62,6 +63,7 @@ const icon = (n, cls = "") =>
   `<svg class="icon ${cls}" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="1.7" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">${icons[n] || icons.grid}</svg>`;
 let executive;
 let checklists;
+let equipmentDocuments;
 let state = {
   fleetQuery: "",
   fleetFamily: "Todos",
@@ -196,7 +198,7 @@ function comparison() {
 const names = {
   overview: "Resumen",
   records: "Registros",
-  fleet: "Flota e historial",
+  fleet: "Flota y expedientes",
   calculator: "Rentabilidad",
   inventory: "Inventario",
   checklists: "Checklists",
@@ -237,7 +239,7 @@ function shell() {
     )
     .join(
       "",
-    )}</nav><div class="sidebar-bottom"><span class="avatar">GR</span><div>Grúas Rhino<small>Vista de demostración</small></div></div></aside><div class="workspace-body"><header class="workspace-top"><div class="breadcrumb">Propuesta 0${state.plan}<span>/</span><b>${names[state.view]}</b></div><div class="top-actions"><span class="demo-pill">Datos de ejemplo</span><button class="icon-btn" data-action="compare" aria-label="Comparar propuestas">${icon("grid")}</button><span class="avatar">MR</span></div></header><div class="offer-strip"><span><strong>${p.title}</strong> <span class="offer-id">/ Propuesta 0${p.id}</span></span><div><b>${money(p.price)}</b> único <i></i> ${p.monthly} <i></i> ${p.term}${p.id === 3 ? " · según alcance" : ""}</div></div><main class="dashboard"><div class="page-heading"><div><p class="eyebrow">${state.plan === 3 ? "DIRECCIÓN · GRÚAS RHINO" : state.plan === 2 ? "GESTIÓN · GRÚAS RHINO" : "CONTROL · GRÚAS RHINO"}</p><h1>${state.view === "overview" ? (state.plan === 3 ? "Tu operación, bajo control." : state.plan === 2 ? "Cada maniobra cuenta." : "Resumen de operación") : names[state.view]}</h1><p>${state.view === "overview" ? "Semana de ejemplo · 21 al 27 de septiembre de 2026" : state.view === "records" ? "Registra y actualiza la información de tu operación." : state.view === "fleet" ? "Última asignación registrada, historial y gasto acumulado." : state.view === "inventory" ? (state.plan === 2 ? "Existencias al día con ajustes manuales de tu equipo." : "Registra un servicio y el asistente descuenta los insumos definidos.") : state.view === "quote" ? "Elige opcionales y revisa el total estimado de desarrollo." : state.view === "shopping" ? "Insumos necesarios para recuperar los mínimos de tu almacén." : state.view === "reports" ? "Reportes de maniobras y mantenimientos listos para revisar y guardar." : state.view === "attention" ? "Pendientes detectados en los registros y órdenes de esta demostración." : state.view === "checklists" ? "Inspección, recepción en taller y entrega de equipo con evidencias." : state.view === "calendar" ? "Reservas, operaciones, traslados y visitas al taller en una sola agenda." : state.view === "calculator" ? "Encuentra una tarifa que cubra tus costos y tu ganancia objetivo." : "Una demostración de cómo recibirías información de tu negocio."}</p></div>${["overview", "records"].includes(state.view) ? `<button class="button primary" data-action="${state.plan === 1 ? "new" : "wizard"}">${icon("plus")} ${state.plan === 1 ? "Nuevo registro" : "Registrar actividad"}</button>` : state.view === "fleet" ? `<button class="button primary" data-action="new-equipment">${icon("plus")} Registrar grúa</button>` : ""}</div>${state.view === "overview" ? overview() : state.view === "records" ? recordsView() : state.view === "fleet" ? fleetView() : state.view === "checklists" ? checklists.view() : state.view === "calculator" ? calculator() : state.view === "inventory" ? inventoryView() : ["shopping", "reports", "attention", "calendar", "quote"].includes(state.view) ? executive.view(state.view) : assistantView()}<p class="workspace-note">Demostración interactiva · Los cambios duran durante esta visita y se reinician al recargar. Todos los cálculos dependen de los datos capturados.</p></main></div></div>`;
+    )}</nav><div class="sidebar-bottom"><span class="avatar">GR</span><div>Grúas Rhino<small>Vista de demostración</small></div></div></aside><div class="workspace-body"><header class="workspace-top"><div class="breadcrumb">Propuesta 0${state.plan}<span>/</span><b>${names[state.view]}</b></div><div class="top-actions"><span class="demo-pill">Datos de ejemplo</span><button class="icon-btn" data-action="compare" aria-label="Comparar propuestas">${icon("grid")}</button><span class="avatar">MR</span></div></header><div class="offer-strip"><span><strong>${p.title}</strong> <span class="offer-id">/ Propuesta 0${p.id}</span></span><div><b>${money(p.price)}</b> único <i></i> ${p.monthly} <i></i> ${p.term}${p.id === 3 ? " · según alcance" : ""}</div></div><main class="dashboard"><div class="page-heading"><div><p class="eyebrow">${state.plan === 3 ? "DIRECCIÓN · GRÚAS RHINO" : state.plan === 2 ? "GESTIÓN · GRÚAS RHINO" : "CONTROL · GRÚAS RHINO"}</p><h1>${state.view === "overview" ? (state.plan === 3 ? "Tu operación, bajo control." : state.plan === 2 ? "Cada maniobra cuenta." : "Resumen de operación") : names[state.view]}</h1><p>${state.view === "overview" ? "Semana de ejemplo · 21 al 27 de septiembre de 2026" : state.view === "records" ? "Registra y actualiza la información de tu operación." : state.view === "fleet" ? "Asignaciones, documentos, vencimientos e historial de cada grúa." : state.view === "inventory" ? (state.plan === 2 ? "Existencias al día con ajustes manuales de tu equipo." : "Registra un servicio y el asistente descuenta los insumos definidos.") : state.view === "quote" ? "Elige opcionales y revisa el total estimado de desarrollo." : state.view === "shopping" ? "Insumos necesarios para recuperar los mínimos de tu almacén." : state.view === "reports" ? "Reportes de maniobras y mantenimientos listos para revisar y guardar." : state.view === "attention" ? "Pendientes detectados en los registros y órdenes de esta demostración." : state.view === "checklists" ? "Inspección, recepción en taller y entrega de equipo con evidencias." : state.view === "calendar" ? "Reservas, operaciones, traslados y visitas al taller en una sola agenda." : state.view === "calculator" ? "Encuentra una tarifa que cubra tus costos y tu ganancia objetivo." : "Una demostración de cómo recibirías información de tu negocio."}</p></div>${["overview", "records"].includes(state.view) ? `<button class="button primary" data-action="${state.plan === 1 ? "new" : "wizard"}">${icon("plus")} ${state.plan === 1 ? "Nuevo registro" : "Registrar actividad"}</button>` : state.view === "fleet" ? `<button class="button primary" data-action="new-equipment">${icon("plus")} Registrar grúa</button>` : ""}</div>${state.view === "overview" ? overview() : state.view === "records" ? recordsView() : state.view === "fleet" ? fleetView() : state.view === "checklists" ? checklists.view() : state.view === "calculator" ? calculator() : state.view === "inventory" ? inventoryView() : ["shopping", "reports", "attention", "calendar", "quote"].includes(state.view) ? executive.view(state.view) : assistantView()}<p class="workspace-note">Demostración interactiva · Los cambios duran durante esta visita y se reinician al recargar. Todos los cálculos dependen de los datos capturados.</p></main></div></div>`;
 }
 function stat(label, value, sub, ic, kind = "") {
   return `<article class="stat ${kind}"><div class="stat-label">${label}${icon(ic)}</div><strong>${value}</strong><span>${sub}</span></article>`;
@@ -329,11 +331,11 @@ function fleetView() {
         .toLowerCase()
         .includes(state.fleetQuery.toLowerCase()),
   );
-  return `<section class="catalog-toolbar panel"><label>Buscar grúa<input id="fleet-search" value="${esc(state.fleetQuery)}" placeholder="Número, modelo, operador o ubicación…"></label><label>Tipo<select id="fleet-family"><option>Todos</option>${[...new Set(state.fleet.map((f) => f.family).filter(Boolean))].map((f) => `<option ${f === state.fleetFamily ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></label><label>Estado<select id="fleet-status"><option>Todos</option>${[...new Set(state.fleet.map((f) => f.status))].map((v) => `<option ${v === state.fleetStatus ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label><p>${shown.length} de ${state.fleet.length} equipos</p></section><div class="fleet-cards">${
+  return `${equipmentDocuments.overview()}<section class="catalog-toolbar panel"><label>Buscar grúa<input id="fleet-search" value="${esc(state.fleetQuery)}" placeholder="Número, modelo, operador o ubicación…"></label><label>Tipo<select id="fleet-family"><option>Todos</option>${[...new Set(state.fleet.map((f) => f.family).filter(Boolean))].map((f) => `<option ${f === state.fleetFamily ? "selected" : ""}>${esc(f)}</option>`).join("")}</select></label><label>Estado<select id="fleet-status"><option>Todos</option>${[...new Set(state.fleet.map((f) => f.status))].map((v) => `<option ${v === state.fleetStatus ? "selected" : ""}>${esc(v)}</option>`).join("")}</select></label><p>${shown.length} de ${state.fleet.length} equipos</p></section><div class="fleet-cards">${
     shown
       .map((f) => {
         const t = totals(state.records.filter((r) => r.crane === f.id));
-        return `<article class="panel equipment-card">${checklists.photo(f)}<div class="panel-heading"><span class="eyebrow">${esc(f.family || "Equipo registrado")}</span><span class="status ${statusClass(f.status)}">${esc(f.status)}</span></div><div class="equipment-title"><span>${esc(f.id)}</span><h2>${esc(f.name)}</h2><p>${esc(f.capacity)}${f.capacity.includes("t·m") ? " · Momento máximo" : " · Capacidad comercial"}</p><p>${esc(f.operator)}</p></div><div class="equipment-meter"><span>Horómetro</span><b>${num(f.meterHours || 0)} h</b></div><div class="assignment"><span>${icon("pin")} ${esc(f.place)}</span><b>${esc(f.job)}</b><small>Última asignación: ${esc(f.date)}</small></div><div class="equipment-totals"><div><span>Gasto acumulado</span><strong>${money(t.cost)}</strong></div><div><span>Ingresos</span><strong>${money(t.income)}</strong></div></div>${state.plan > 1 ? `<button class="button secondary fleet-checklist" data-new-checklist="${f.id}">${icon("check")} Iniciar checklist</button>` : ""}<div class="card-actions"><button class="text-link" data-history="${f.id}">Ver historial ${icon("arrow")}</button><button class="icon-btn" data-equipment="${f.id}" aria-label="Editar ${f.id}">${icon("edit")}</button></div>${f.source ? `<details class="equipment-source"><summary>Referencia del modelo</summary><p>${esc(f.capacityNote)}</p><a href="${esc(f.source)}" target="_blank" rel="noopener">Consultar fabricante ↗</a></details>` : ""}</article>`;
+        return `<article class="panel equipment-card">${checklists.photo(f)}<div class="panel-heading"><span class="eyebrow">${esc(f.family || "Equipo registrado")}</span><span class="status ${statusClass(f.status)}">${esc(f.status)}</span></div><div class="equipment-title"><span>${esc(f.id)}</span><h2>${esc(f.name)}</h2><p>${esc(f.capacity)}${f.capacity.includes("t·m") ? " · Momento máximo" : " · Capacidad comercial"}</p><p>${esc(f.operator)}</p></div><div class="equipment-meter"><span>Horómetro</span><b>${num(f.meterHours || 0)} h</b></div><div class="assignment"><span>${icon("pin")} ${esc(f.place)}</span><b>${esc(f.job)}</b><small>Última asignación: ${esc(f.date)}</small></div><div class="equipment-totals"><div><span>Gasto acumulado</span><strong>${money(t.cost)}</strong></div><div><span>Ingresos</span><strong>${money(t.income)}</strong></div></div>${equipmentDocuments.summary(f)}${state.plan > 1 ? `<button class="button secondary fleet-checklist" data-new-checklist="${f.id}">${icon("check")} Iniciar checklist</button>` : ""}<div class="card-actions"><button class="text-link" data-history="${f.id}">Ver historial ${icon("arrow")}</button><button class="icon-btn" data-equipment="${f.id}" aria-label="Editar ${f.id}">${icon("edit")}</button></div>${f.source ? `<details class="equipment-source"><summary>Referencia del modelo</summary><p>${esc(f.capacityNote)}</p><a href="${esc(f.source)}" target="_blank" rel="noopener">Consultar fabricante ↗</a></details>` : ""}</article>`;
       })
       .join("") ||
     '<div class="executive-empty">No hay grúas con estos filtros.</div>'
@@ -442,6 +444,7 @@ function render() {
 function bind() {
   executive.bind();
   checklists.bind();
+  equipmentDocuments.bind();
   bindInventory();
   bindCatalogFilters();
   document
@@ -815,6 +818,16 @@ checklists = createChecklists({
   nav,
   showDialog,
   closeButton,
+});
+equipmentDocuments = createEquipmentDocuments({
+  state,
+  esc,
+  icon,
+  num,
+  showDialog,
+  closeButton,
+  render,
+  notify,
 });
 parseRoute();
 const ctx = document.modelContext;
