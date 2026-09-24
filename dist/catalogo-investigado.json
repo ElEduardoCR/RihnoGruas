@@ -1,0 +1,1548 @@
+{
+  "schemaVersion": "1.0",
+  "language": "es-MX",
+  "researchedAt": "2026-09-24",
+  "demoOnly": true,
+  "title": "Catálogo de referencia · Grúas Rhino",
+  "notices": [
+    "Los modelos y fichas comerciales son reales. Códigos de activos, códigos de almacén y existencias son ficticios para la demostración.",
+    "Las capacidades son máximos comerciales dependientes de configuración. No sirven para planear o autorizar una maniobra.",
+    "No se verificó compatibilidad de ningún insumo con una unidad concreta. Confirmar placa, serie, motor, configuración, manual y número de parte antes de comprar o instalar.",
+    "Checklist ilustrativo. No reemplaza manuales, capacitación, inspección competente ni requisitos locales.",
+    "OSHA se usa como referencia técnica estadounidense; este catálogo no afirma cumplimiento normativo en México, España ni otra jurisdicción."
+  ],
+  "craneTypes": [
+    "Todo terreno",
+    "Terreno difícil",
+    "Sobre camión",
+    "Articulada",
+    "Sobre orugas",
+    "Industrial"
+  ],
+  "cranes": [
+    {
+      "id": "crane-01",
+      "demoAssetCode": "RH-001",
+      "brand": "Liebherr",
+      "model": "LTM 1030-2.1",
+      "type": "Todo terreno",
+      "capacityTonnes": 35,
+      "capacityLabel": "35 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 30,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 44,
+      "sourceIds": [
+        "liebherr_1030"
+      ],
+      "configurationNote": "Dos ejes. Capacidad máxima comercial, dependiente de configuración.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-02",
+      "demoAssetCode": "RH-002",
+      "brand": "Liebherr",
+      "model": "LTM 1100-5.3",
+      "type": "Todo terreno",
+      "capacityTonnes": 100,
+      "capacityLabel": "100 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 62,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 76,
+      "sourceIds": [
+        "liebherr_1100"
+      ],
+      "configurationNote": "Cinco ejes. Las extensiones son opcionales.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-03",
+      "demoAssetCode": "RH-003",
+      "brand": "Grove",
+      "model": "GMK3060L-1",
+      "type": "Todo terreno",
+      "capacityTonnes": 60,
+      "capacityLabel": "60 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 48,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 65,
+      "sourceIds": [
+        "grove_3060"
+      ],
+      "configurationNote": "Tres ejes. Usar la ficha métrica correspondiente al mercado.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-04",
+      "demoAssetCode": "RH-004",
+      "brand": "Tadano",
+      "model": "AC 4.080-1",
+      "type": "Todo terreno",
+      "capacityTonnes": 80,
+      "capacityLabel": "80 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 60,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 78,
+      "sourceIds": [
+        "tadano_ac80"
+      ],
+      "configurationNote": "Cuatro ejes. La capacidad no es uniforme en todo el alcance.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-05",
+      "demoAssetCode": "RH-005",
+      "brand": "Tadano",
+      "model": "GR-1000XL-4",
+      "type": "Terreno difícil",
+      "capacityTonnes": 90.7,
+      "capacityLabel": "90.7 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 47,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 64.4,
+      "sourceIds": [
+        "tadano_gr1000"
+      ],
+      "configurationNote": "100 USt equivalen a la clase de 90,7 t publicada; no mostrar 100 t.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-06",
+      "demoAssetCode": "RH-006",
+      "brand": "Grove",
+      "model": "GRT8100-1",
+      "type": "Terreno difícil",
+      "capacityTonnes": 100,
+      "capacityLabel": "100 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 47,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 72.9,
+      "sourceIds": [
+        "grove_grt100"
+      ],
+      "configurationNote": "El fabricante publica clases regionales de 100 USt y 100 t; aquí se conserva su ficha métrica de 100 t. No convertir ni mezclar tablas regionales.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-07",
+      "demoAssetCode": "RH-007",
+      "brand": "Tadano",
+      "model": "GR-550XL",
+      "type": "Terreno difícil",
+      "capacityTonnes": 50,
+      "capacityLabel": "50 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 34.7,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 50.3,
+      "sourceIds": [
+        "tadano_gr550"
+      ],
+      "configurationNote": "La página comercial usa GR-550XL; confirmar sufijo de generación con placa y serie.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-08",
+      "demoAssetCode": "RH-008",
+      "brand": "Grove",
+      "model": "TMS800E",
+      "type": "Sobre camión",
+      "capacityTonnes": 70,
+      "capacityLabel": "70 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 39,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 70.7,
+      "sourceIds": [
+        "grove_tms800"
+      ],
+      "configurationNote": "Modelo no vigente; útil para flota usada. La página publica 80 USt / 70 t y avisa que TM/TMS no tienen certificación CE.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-09",
+      "demoAssetCode": "RH-009",
+      "brand": "National Crane",
+      "model": "NBT60XL",
+      "type": "Sobre camión",
+      "capacityTonnes": 54.4,
+      "capacityLabel": "54.4 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 46,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 61.6,
+      "sourceIds": [
+        "national_nbt60"
+      ],
+      "configurationNote": "Clase de 60 USt. El camión portador y accesorios dependen de instalación.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-10",
+      "demoAssetCode": "RH-010",
+      "brand": "Palfinger",
+      "model": "PK 36502",
+      "type": "Articulada",
+      "capacityTonnes": 13.2,
+      "capacityLabel": "13.2 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": 34.5,
+      "mainBoomMaxM": null,
+      "maxOutreachM": 16.3,
+      "maxHoistHeightM": null,
+      "sourceIds": [
+        "palfinger_36502"
+      ],
+      "configurationNote": "Momento máximo comercial 34,5 t·m. Alcance y capacidad varían por versión y extensiones; máximos no simultáneos.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-11",
+      "demoAssetCode": "RH-011",
+      "brand": "Fassi",
+      "model": "F545RA xe-dynamic",
+      "type": "Articulada",
+      "capacityTonnes": null,
+      "capacityLabel": "53 t·m",
+      "capacityKind": "lifting_moment",
+      "maxLiftingMomentTm": 53,
+      "mainBoomMaxM": null,
+      "maxOutreachM": 28.55,
+      "maxHoistHeightM": null,
+      "sourceIds": [
+        "fassi_545"
+      ],
+      "configurationNote": "53 t·m es momento de elevación, no masa de 53 t. Alcance publicado con jib.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-12",
+      "demoAssetCode": "RH-012",
+      "brand": "Hiab",
+      "model": "X-HiPro 232E-3",
+      "type": "Articulada",
+      "capacityTonnes": null,
+      "capacityLabel": "20.7 t·m",
+      "capacityKind": "lifting_moment",
+      "maxLiftingMomentTm": 20.7,
+      "mainBoomMaxM": null,
+      "maxOutreachM": 10.6,
+      "maxHoistHeightM": null,
+      "sourceIds": [
+        "hiab_232"
+      ],
+      "configurationNote": "Datos de la instalación FrameWorks publicada por Hiab; momento con ADC. Otras versiones E-4/E-5/E-6 difieren.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-13",
+      "demoAssetCode": "RH-013",
+      "brand": "Liebherr",
+      "model": "LR 1160.1",
+      "type": "Sobre orugas",
+      "capacityTonnes": 160,
+      "capacityLabel": "160 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": null,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 136,
+      "sourceIds": [
+        "liebherr_lr1160"
+      ],
+      "configurationNote": "Pluma de celosía; altura máxima de la familia con combinaciones de pluma.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-14",
+      "demoAssetCode": "RH-014",
+      "brand": "Kobelco",
+      "model": "CKE900G-3",
+      "type": "Sobre orugas",
+      "capacityTonnes": 90,
+      "capacityLabel": "90 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 61,
+      "maxOutreachM": null,
+      "maxHoistHeightM": null,
+      "sourceIds": [
+        "kobelco_900"
+      ],
+      "configurationNote": "El catálogo también menciona 100 t teóricas. La demo usa 90 t, cifra publicada con polea auxiliar; consultar configuración específica.",
+      "demoOnly": true
+    },
+    {
+      "id": "crane-15",
+      "demoAssetCode": "RH-015",
+      "brand": "Shuttlelift",
+      "model": "SCD15",
+      "type": "Industrial",
+      "capacityTonnes": 13.6,
+      "capacityLabel": "13.6 t",
+      "capacityKind": "nominal_maximum_mass",
+      "maxLiftingMomentTm": null,
+      "mainBoomMaxM": 15.2,
+      "maxOutreachM": null,
+      "maxHoistHeightM": 21.18,
+      "sourceIds": [
+        "shuttlelift_15"
+      ],
+      "configurationNote": "Carrydeck. Pluma principal máxima de 15,2 m según opción; capacidad del gancho distinta de capacidad de plataforma.",
+      "demoOnly": true
+    }
+  ],
+  "supplies": [
+    {
+      "id": "supply-001",
+      "demoSku": "DEM-0001",
+      "name": "Llanta X-CRANE 2 385/95 R25",
+      "category": "Llantas",
+      "unit": "pieza",
+      "brand": "Michelin",
+      "partNumber": null,
+      "sourceIds": [
+        "michelin_crane2"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar rin, medida, índice de carga/velocidad y configuración de ejes; no asignar por tonelaje de grúa.",
+      "compatibleCraneIds": [],
+      "demoStock": 4,
+      "demoMinimumStock": 2,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-002",
+      "demoSku": "DEM-0002",
+      "name": "Llanta X-CRANE 2 445/95 R25",
+      "category": "Llantas",
+      "unit": "pieza",
+      "brand": "Michelin",
+      "partNumber": null,
+      "sourceIds": [
+        "michelin_crane2"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar rin, medida, índice de carga/velocidad y configuración de ejes; no asignar por tonelaje de grúa.",
+      "compatibleCraneIds": [],
+      "demoStock": 2,
+      "demoMinimumStock": 2,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-003",
+      "demoSku": "DEM-0003",
+      "name": "Llanta X-CRANE 2 525/80 R25",
+      "category": "Llantas",
+      "unit": "pieza",
+      "brand": "Michelin",
+      "partNumber": null,
+      "sourceIds": [
+        "michelin_crane2"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar rin, medida, índice de carga/velocidad y configuración de ejes; no asignar por tonelaje de grúa.",
+      "compatibleCraneIds": [],
+      "demoStock": 1,
+      "demoMinimumStock": 2,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-004",
+      "demoSku": "DEM-0004",
+      "name": "Aceite de motor Delvac 1300 Super 15W-40",
+      "category": "Aceites y lubricantes",
+      "unit": "L",
+      "brand": "Mobil",
+      "partNumber": null,
+      "sourceIds": [
+        "mobil_engine"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar especificación del motor, clima y aprobación OEM; no inferir compatibilidad solo por viscosidad.",
+      "compatibleCraneIds": [],
+      "demoStock": 80,
+      "demoMinimumStock": 40,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-005",
+      "demoSku": "DEM-0005",
+      "name": "Aceite hidráulico DTE 25 Ultra ISO VG 46",
+      "category": "Aceites y lubricantes",
+      "unit": "L",
+      "brand": "Mobil",
+      "partNumber": null,
+      "sourceIds": [
+        "mobil_dte"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Grado de catálogo; confirmar aprobación y fluido existente antes de rellenar.",
+      "compatibleCraneIds": [],
+      "demoStock": 120,
+      "demoMinimumStock": 60,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-006",
+      "demoSku": "DEM-0006",
+      "name": "Aceite hidráulico DTE 26 Ultra ISO VG 68",
+      "category": "Aceites y lubricantes",
+      "unit": "L",
+      "brand": "Mobil",
+      "partNumber": null,
+      "sourceIds": [
+        "mobil_dte"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "No intercambiar con ISO VG 46 sin requisito del fabricante.",
+      "compatibleCraneIds": [],
+      "demoStock": 45,
+      "demoMinimumStock": 60,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-007",
+      "demoSku": "DEM-0007",
+      "name": "Aceite para engranajes Mobilube HD 80W-90",
+      "category": "Aceites y lubricantes",
+      "unit": "L",
+      "brand": "Mobil",
+      "partNumber": null,
+      "sourceIds": [
+        "mobil_gear"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar eje/reductor y especificación; no asumir uso en transmisiones automáticas.",
+      "compatibleCraneIds": [],
+      "demoStock": 40,
+      "demoMinimumStock": 20,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-008",
+      "demoSku": "DEM-0008",
+      "name": "Grasa Mobilgrease XHP 222",
+      "category": "Aceites y lubricantes",
+      "unit": "kg",
+      "brand": "Mobil",
+      "partNumber": null,
+      "sourceIds": [
+        "mobil_grease"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar punto de engrase y compatibilidad con espesante existente.",
+      "compatibleCraneIds": [],
+      "demoStock": 18,
+      "demoMinimumStock": 10,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-009",
+      "demoSku": "DEM-0009",
+      "name": "Lubricante para cable de acero — por validar",
+      "category": "Aceites y lubricantes",
+      "unit": "kg",
+      "brand": null,
+      "partNumber": null,
+      "sourceIds": [
+        "grove_rope"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Referencia genérica. Seleccionar con OEM según cable, lubricante original y método de aplicación.",
+      "compatibleCraneIds": [],
+      "demoStock": 10,
+      "demoMinimumStock": 8,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-010",
+      "demoSku": "DEM-0010",
+      "name": "Refrigerante ES Compleat",
+      "category": "Fluidos de servicio",
+      "unit": "L",
+      "brand": "Fleetguard",
+      "partNumber": null,
+      "sourceIds": [
+        "fleetguard"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Definir formulación y concentración exactas; color y marca no prueban compatibilidad.",
+      "compatibleCraneIds": [],
+      "demoStock": 35,
+      "demoMinimumStock": 40,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-011",
+      "demoSku": "DEM-0011",
+      "name": "Fluido de escape diésel DEF / AdBlue",
+      "category": "Fluidos de servicio",
+      "unit": "L",
+      "brand": null,
+      "partNumber": null,
+      "sourceIds": [
+        "cummins_def"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Solo para equipos con SCR y depósito específico; confirmar especificación, conservación y lote.",
+      "compatibleCraneIds": [],
+      "demoStock": 60,
+      "demoMinimumStock": 40,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-012",
+      "demoSku": "DEM-0012",
+      "name": "Filtro de aceite de motor",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_liquid"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Identificar motor, rosca, sello, derivación y pieza OEM.",
+      "compatibleCraneIds": [],
+      "demoStock": 10,
+      "demoMinimumStock": 6,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-013",
+      "demoSku": "DEM-0013",
+      "name": "Prefiltro de combustible / separador de agua",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_liquid"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar vaso, drenaje, sensor y sistema de inyección.",
+      "compatibleCraneIds": [],
+      "demoStock": 5,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-014",
+      "demoSku": "DEM-0014",
+      "name": "Filtro secundario de combustible",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_liquid"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar pieza, eficiencia y presión del circuito; no intercambiar con prefiltro.",
+      "compatibleCraneIds": [],
+      "demoStock": 8,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-015",
+      "demoSku": "DEM-0015",
+      "name": "Filtro de aire primario",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_air"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar carcasa, sellado y elemento exacto.",
+      "compatibleCraneIds": [],
+      "demoStock": 4,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-016",
+      "demoSku": "DEM-0016",
+      "name": "Elemento de seguridad de aire",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_air"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Elemento interno específico; no sustituye el primario.",
+      "compatibleCraneIds": [],
+      "demoStock": 2,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-017",
+      "demoSku": "DEM-0017",
+      "name": "Filtro hidráulico de retorno",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar elemento, colapso, eficiencia y válvula de derivación.",
+      "compatibleCraneIds": [],
+      "demoStock": 6,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-018",
+      "demoSku": "DEM-0018",
+      "name": "Filtro hidráulico de presión",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar carcasa y nivel de filtración del circuito.",
+      "compatibleCraneIds": [],
+      "demoStock": 3,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-019",
+      "demoSku": "DEM-0019",
+      "name": "Filtro de aire de cabina",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_air"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar dimensiones y cabina portador/superestructura.",
+      "compatibleCraneIds": [],
+      "demoStock": 8,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-020",
+      "demoSku": "DEM-0020",
+      "name": "Respiradero filtrante del depósito hidráulico",
+      "category": "Filtros",
+      "unit": "pieza",
+      "brand": "Donaldson (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "donaldson_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar conexión y especificación del depósito.",
+      "compatibleCraneIds": [],
+      "demoStock": 4,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-021",
+      "demoSku": "DEM-0021",
+      "name": "O-ring NBR",
+      "category": "Sellos y empaques",
+      "unit": "juego",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_oring"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Definir compuesto, dureza y medidas; NBR no es una especificación completa.",
+      "compatibleCraneIds": [],
+      "demoStock": 8,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-022",
+      "demoSku": "DEM-0022",
+      "name": "O-ring FKM",
+      "category": "Sellos y empaques",
+      "unit": "juego",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_oring"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar fluido, temperatura, compuesto y dimensiones; no reemplazo automático de NBR.",
+      "compatibleCraneIds": [],
+      "demoStock": 3,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-023",
+      "demoSku": "DEM-0023",
+      "name": "Sello de vástago",
+      "category": "Sellos y empaques",
+      "unit": "pieza",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_seals"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Identificar cilindro, ranura, material y perfil OEM.",
+      "compatibleCraneIds": [],
+      "demoStock": 4,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-024",
+      "demoSku": "DEM-0024",
+      "name": "Sello de pistón",
+      "category": "Sellos y empaques",
+      "unit": "pieza",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_seals"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Seleccionar por diseño de cilindro y ranura, no solo diámetro.",
+      "compatibleCraneIds": [],
+      "demoStock": 2,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-025",
+      "demoSku": "DEM-0025",
+      "name": "Rascador de cilindro",
+      "category": "Sellos y empaques",
+      "unit": "pieza",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_seals"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar alojamiento y material compatible con ambiente.",
+      "compatibleCraneIds": [],
+      "demoStock": 6,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-026",
+      "demoSku": "DEM-0026",
+      "name": "Anillo guía de cilindro",
+      "category": "Sellos y empaques",
+      "unit": "pieza",
+      "brand": "Parker (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "parker_seals"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar perfil, dimensiones y material con reparación autorizada.",
+      "compatibleCraneIds": [],
+      "demoStock": 4,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-027",
+      "demoSku": "DEM-0027",
+      "name": "Manguera hidráulica a granel",
+      "category": "Hidráulica",
+      "unit": "m",
+      "brand": "Gates (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "gates_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Definir diámetro, fluido, presión, temperatura, radio de curvatura y montaje; ensamble por personal competente.",
+      "compatibleCraneIds": [],
+      "demoStock": 35,
+      "demoMinimumStock": 20,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-028",
+      "demoSku": "DEM-0028",
+      "name": "Terminal para manguera hidráulica",
+      "category": "Hidráulica",
+      "unit": "pieza",
+      "brand": "Gates (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "gates_crimp"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Validar combinación exacta de manguera, terminal y prensado; no mezclar por apariencia.",
+      "compatibleCraneIds": [],
+      "demoStock": 18,
+      "demoMinimumStock": 12,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-029",
+      "demoSku": "DEM-0029",
+      "name": "Adaptador hidráulico",
+      "category": "Hidráulica",
+      "unit": "pieza",
+      "brand": "Gates (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "gates_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Identificar rosca y asiento: JIC, ORFS, BSP y métrica no son intercambiables.",
+      "compatibleCraneIds": [],
+      "demoStock": 12,
+      "demoMinimumStock": 8,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-030",
+      "demoSku": "DEM-0030",
+      "name": "Acople rápido hidráulico",
+      "category": "Hidráulica",
+      "unit": "juego",
+      "brand": "Gates (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "gates_hydraulic"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar ambas mitades, circuito y sellos; no seleccionar solo por diámetro.",
+      "compatibleCraneIds": [],
+      "demoStock": 3,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    },
+    {
+      "id": "supply-031",
+      "demoSku": "DEM-0031",
+      "name": "Fijador de roscas LOCTITE 243",
+      "category": "Consumibles",
+      "unit": "frasco",
+      "brand": "Henkel",
+      "partNumber": null,
+      "sourceIds": [
+        "loctite"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Aplicar solo donde lo indique el fabricante y respetar su procedimiento de apriete.",
+      "compatibleCraneIds": [],
+      "demoStock": 6,
+      "demoMinimumStock": 3,
+      "stockIsSynthetic": true,
+      "scope": "taller"
+    },
+    {
+      "id": "supply-032",
+      "demoSku": "DEM-0032",
+      "name": "Limpiador de contactos Specialist",
+      "category": "Consumibles",
+      "unit": "aerosol",
+      "brand": "WD-40",
+      "partNumber": null,
+      "sourceIds": [
+        "wd40_contact"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Verificar material y método del fabricante; evitar adhesivos y pantallas.",
+      "compatibleCraneIds": [],
+      "demoStock": 8,
+      "demoMinimumStock": 4,
+      "stockIsSynthetic": true,
+      "scope": "taller"
+    },
+    {
+      "id": "supply-033",
+      "demoSku": "DEM-0033",
+      "name": "Desengrasante industrial Specialist",
+      "category": "Consumibles",
+      "unit": "L",
+      "brand": "WD-40",
+      "partNumber": null,
+      "sourceIds": [
+        "wd40_cleaners"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar formulación y compatibilidad con pintura, elastómeros y superficies lubricadas.",
+      "compatibleCraneIds": [],
+      "demoStock": 15,
+      "demoMinimumStock": 10,
+      "stockIsSynthetic": true,
+      "scope": "taller"
+    },
+    {
+      "id": "supply-034",
+      "demoSku": "DEM-0034",
+      "name": "Almohadilla absorbente para hidrocarburos HP-156",
+      "category": "Consumibles",
+      "unit": "pieza",
+      "brand": "3M",
+      "partNumber": null,
+      "sourceIds": [
+        "3m_absorbent"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Absorbente de hidrocarburos; seleccionar otro producto para fluidos incompatibles.",
+      "compatibleCraneIds": [],
+      "demoStock": 45,
+      "demoMinimumStock": 30,
+      "stockIsSynthetic": true,
+      "scope": "taller"
+    },
+    {
+      "id": "supply-035",
+      "demoSku": "DEM-0035",
+      "name": "Paño industrial WypAll PowerClean",
+      "category": "Consumibles",
+      "unit": "pieza",
+      "brand": "Kimberly-Clark",
+      "partNumber": null,
+      "sourceIds": [
+        "wypall"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Definir referencia y presentación de compra; evitar contaminación de circuitos limpios.",
+      "compatibleCraneIds": [],
+      "demoStock": 120,
+      "demoMinimumStock": 80,
+      "stockIsSynthetic": true,
+      "scope": "taller"
+    },
+    {
+      "id": "supply-036",
+      "demoSku": "DEM-0036",
+      "name": "Engrasador recto",
+      "category": "Consumibles",
+      "unit": "pieza",
+      "brand": "SKF (familia de referencia)",
+      "partNumber": null,
+      "sourceIds": [
+        "skf_nipples"
+      ],
+      "compatibilityStatus": "Por validar",
+      "compatibilityNote": "Confirmar rosca, cabeza y punto de engrase; no forzar roscas distintas.",
+      "compatibleCraneIds": [],
+      "demoStock": 22,
+      "demoMinimumStock": 12,
+      "stockIsSynthetic": true,
+      "scope": "equipo"
+    }
+  ],
+  "checklist": {
+    "responseOptions": [
+      "Pendiente",
+      "Correcto",
+      "Requiere revisión",
+      "No aplica"
+    ],
+    "preUse": [
+      {
+        "id": "pre-01",
+        "label": "Documentación disponible",
+        "instruction": "Manual y tabla de carga de esta unidad accesibles.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "documents",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-02",
+        "label": "Pendientes del turno anterior",
+        "instruction": "Revisar incidencias abiertas y estado de liberación.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "history",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-03",
+        "label": "Área de trabajo",
+        "instruction": "Revisar terreno, apoyos, obstáculos y zona de giro.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "map",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-04",
+        "label": "Clima y entorno",
+        "instruction": "Evaluar condiciones conforme al manual y plan de maniobra.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "cloud",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-05",
+        "label": "Estructura y uniones",
+        "instruction": "Observar pluma, chasis, pasadores y fijaciones accesibles.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "crane",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-06",
+        "label": "Cable, poleas y tambor",
+        "instruction": "Revisar condición visible, recorrido y asentamiento.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "cable",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-07",
+        "label": "Gancho y accesorios",
+        "instruction": "Revisar identificación y condición de gancho y aparejos.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "hook",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-08",
+        "label": "Mangueras y conexiones",
+        "instruction": "Observar fugas, daños y conexiones sueltas.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "droplet",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-09",
+        "label": "Niveles de fluidos",
+        "instruction": "Comprobar según posiciones y método del fabricante.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "gauge",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-10",
+        "label": "Llantas u orugas",
+        "instruction": "Revisar condición y configuración aplicable a la unidad.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "wheel",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-11",
+        "label": "Estabilizadores y nivelación",
+        "instruction": "Verificar montaje, apoyo y posición conforme al manual.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "outriggers",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-12",
+        "label": "Cabina y visibilidad",
+        "instruction": "Comprobar cristales, espejos, accesos y visibilidad.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "eye",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-13",
+        "label": "Mandos y frenos",
+        "instruction": "Realizar comprobaciones funcionales autorizadas por el manual.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "joystick",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-14",
+        "label": "Ayudas y dispositivos de seguridad",
+        "instruction": "Verificar indicadores, alarmas y dispositivos instalados.",
+        "sourceIds": [
+          "osha_inspect"
+        ],
+        "iconHint": "shield",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-15",
+        "label": "Configuración de maniobra",
+        "instruction": "Confirmar contrapesos, accesorios y tabla correspondiente.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "settings",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "pre-16",
+        "label": "Carga y comunicación",
+        "instruction": "Confirmar datos de carga y señales del plan aprobado.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "radio",
+        "defaultStatus": "Pendiente"
+      }
+    ],
+    "maintenance": [
+      {
+        "id": "svc-01",
+        "label": "Orden de trabajo",
+        "instruction": "Registrar serie, lecturas y motivo del servicio.",
+        "sourceIds": [
+          "manitowoc_manuals"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-02",
+        "label": "Plan aplicable",
+        "instruction": "Tomar tareas e intervalos del manual exacto de la unidad.",
+        "sourceIds": [
+          "manitowoc_lube"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-03",
+        "label": "Aseguramiento del equipo",
+        "instruction": "Aplicar procedimiento de aislamiento y señalización antes del servicio.",
+        "sourceIds": [
+          "manitowoc_lube"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-04",
+        "label": "Lubricación",
+        "instruction": "Registrar puntos atendidos y producto aprobado utilizado.",
+        "sourceIds": [
+          "manitowoc_lube"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-05",
+        "label": "Fluidos y filtros",
+        "instruction": "Documentar servicio indicado, cantidades y referencias verificadas.",
+        "sourceIds": [
+          "manitowoc_lube"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-06",
+        "label": "Cable de acero",
+        "instruction": "Inspeccionar y lubricar conforme al procedimiento específico.",
+        "sourceIds": [
+          "grove_rope"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-07",
+        "label": "Hallazgos y reparación",
+        "instruction": "Asociar evidencia, diagnóstico y trabajo autorizado.",
+        "sourceIds": [
+          "osha_operate"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      },
+      {
+        "id": "svc-08",
+        "label": "Cierre técnico",
+        "instruction": "Reinstalar protecciones, retirar herramientas y documentar verificación.",
+        "sourceIds": [
+          "manitowoc_lube"
+        ],
+        "iconHint": "wrench",
+        "defaultStatus": "Pendiente"
+      }
+    ],
+    "recordFields": [
+      "assetId",
+      "operatorOrTechnician",
+      "timestamp",
+      "odometerKm",
+      "engineHours",
+      "answers",
+      "observations",
+      "attachments",
+      "workOrderId",
+      "reviewedBy"
+    ],
+    "guidance": "Un hallazgo genera revisión y registro; completar casillas no libera automáticamente la grúa. La persona competente determina restricciones, retiro y liberación según el procedimiento aplicable.",
+    "scheduling": {
+      "mode": "manual_specific",
+      "engineHourInterval": null,
+      "calendarInterval": null,
+      "note": "No precargar intervalos universales. Separar horómetro del portador y de la superestructura cuando existan."
+    }
+  },
+  "sources": [
+    {
+      "id": "liebherr_1030",
+      "title": "Liebherr · LTM 1030-2.1",
+      "url": "https://www.liebherr.com/en-us/p/ltm103021-4407335",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "liebherr_1100",
+      "title": "Liebherr · LTM 1100-5.3",
+      "url": "https://www.liebherr.com/en-us/p/ltm110053-4407335",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "grove_3060",
+      "title": "Grove · GMK3060L-1",
+      "url": "https://www.manitowoc.com/grove/all-terrain-cranes/gmk3060l-1",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "tadano_ac80",
+      "title": "Tadano · AC 4.080-1",
+      "url": "https://www.tadano.com/latam/en/lifting-equipment/all-terrain-cranes/ac-4-080-1/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "tadano_gr1000",
+      "title": "Tadano · GR-1000XL-4",
+      "url": "https://www.tadano.com/latam/en/lifting-equipment/rough-terrain-cranes/gr-1000xl-4/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "grove_grt100",
+      "title": "Grove · GRT8100-1",
+      "url": "https://www.manitowoc.com/grove/rough-terrain-cranes/grt8100-1",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "tadano_gr550",
+      "title": "Tadano · GR-550XL",
+      "url": "https://www.tadano.com/uscan/en/lifting-equipment/rough-terrain-cranes/gr-550xl/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "grove_tms800",
+      "title": "Grove · TMS800E",
+      "url": "https://www.manitowoc.com/grove/truck-mounted-cranes/tms800e",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "national_nbt60",
+      "title": "National Crane · NBT60XL",
+      "url": "https://www.manitowoc.com/national-crane/swing-seat-boom-trucks/nbt60xl",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "palfinger_36502",
+      "title": "Palfinger · PK 36502",
+      "url": "https://www.palfinger.com/europe/en/our-products/cranes/loader-cranes/models/pk-36502.html",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "fassi_545",
+      "title": "Fassi · F545RA xe-dynamic",
+      "url": "https://www.fassi.com/fr/grues/f545ra-xe-dynamic/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "hiab_232",
+      "title": "Hiab · X-HiPro 232E-3, instalación FrameWorks",
+      "url": "https://www.hiab.com/es-cl/partes-y-servicios/instalaciones/instalaciones-estandar/specification-daf-x-hipro-232",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "liebherr_lr1160",
+      "title": "Liebherr · LR 1160.1",
+      "url": "https://www.liebherr.com/en-ca/p/lr1160-4678918",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "kobelco_900",
+      "title": "Kobelco · CKE900G-3, catálogo oficial",
+      "url": "https://www.kobelcocm-global.com/products/cranes/europe/pdf/CKE900G-3spec.pdf?230227=",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "shuttlelift_15",
+      "title": "Shuttlelift · SCD15",
+      "url": "https://www.manitowoc.com/shuttlelift/shuttlelift-carrydeck-cranes/scd15",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "michelin_crane2",
+      "title": "Michelin · X-CRANE 2",
+      "url": "https://business.michelinman.com/tires/michelin-x-crane-2",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "mobil_engine",
+      "title": "Mobil · Delvac 1300 Super 15W-40",
+      "url": "https://www.mobil.com/en/lubricants/for-businesses/heavy-duty-lubricants/products/mobil-delvac-1300-super-15w-40",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "mobil_dte",
+      "title": "Mobil · DTE 20 Ultra, serie",
+      "url": "https://www.mobil.com.de/de-de/industrial/lubricants/product-series/mobil-dte-20-ultra-series",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "mobil_gear",
+      "title": "Mobil · Mobilube HD 80W-90",
+      "url": "https://www.mobil.co.in/en-in/our-products/oil-lubricants/mobilube-hd-80w-90",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "mobil_grease",
+      "title": "Mobil · Mobilgrease XHP, serie",
+      "url": "https://www.global.mobil.com/-/media/pdfs/mobilgrease-xhp-series-v3-focus.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "grove_rope",
+      "title": "Grove · Manual de unidad móvil de engrase",
+      "url": "https://www.manitowoc.com/media/18302/download",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "fleetguard",
+      "title": "Fleetguard · Refrigerantes y químicos",
+      "url": "https://www.fleetguard.com/category/products/coolants-chemicals/0ZGPL0000000FS64AM",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "cummins_def",
+      "title": "Cummins · DEF para sistemas SCR",
+      "url": "https://www.cummins.com/sites/default/files/files/reports/2008_2009_cummins_sustainability_report.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "donaldson_liquid",
+      "title": "Donaldson · Filtración de líquidos de motor",
+      "url": "https://www.donaldson.com/content/dam/donaldson/engine-hydraulics-bulk/catalogs/Engine-Liquid/North-America/F110024-ENG/Donaldson-Engine-Liquid-Product-Guide.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "donaldson_air",
+      "title": "Donaldson · Filtración de aire de motor",
+      "url": "https://www.donaldson.com/content/dam/donaldson/engine-hydraulics-bulk/catalogs/air-intake/north-america/F110027-ENG/Air-Intake-Systems-Product-Guide.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "donaldson_hydraulic",
+      "title": "Donaldson · Catálogo de filtros hidráulicos",
+      "url": "https://ecatalog.donaldson.com/view/478028566",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "parker_oring",
+      "title": "Parker · O-Ring Handbook ORD 5700",
+      "url": "https://discover.parker.com/Parker-ORing-Handbook-ORD-5700",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "parker_seals",
+      "title": "Parker · Hydraulic Seals",
+      "url": "https://www.parker.com/content/dam/Parker-com/Literature/Praedifa/Catalogs/Catalog_HydrSeals_PTD3350-EN.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "gates_hydraulic",
+      "title": "Gates · Catálogo de mangueras hidráulicas",
+      "url": "https://www.gates.com/content/dam/documents-library/catalogs/gates-hydraulic-catalog-en.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "gates_crimp",
+      "title": "Gates · eCrimp, compatibilidad de ensambles",
+      "url": "https://www.gates.com/us/en/innovations-and-solutions/innovations/ecrimp-hydraulic-crimp-database.html",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "loctite",
+      "title": "Henkel · LOCTITE 243",
+      "url": "https://next.henkel-adhesives.com/us/en/products/industrial-adhesives/central-pdp.html/loctite-243/BP000000316211.html",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "wd40_contact",
+      "title": "WD-40 · Specialist Contact Cleaner",
+      "url": "https://www.wd40.com/products/contact-cleaner/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "wd40_cleaners",
+      "title": "WD-40 · Productos de limpieza y desengrase",
+      "url": "https://www.wd40.com/how-to/videos/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "3m_absorbent",
+      "title": "3M · Absorbentes para hidrocarburos",
+      "url": "https://www.3m.com/3M/en_US/p/c/cleaning-supplies/spill-control/sorbents/i/energy/oil-gas/",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "wypall",
+      "title": "Kimberly-Clark · WypAll industrial",
+      "url": "https://www.kcprofessional.com/en-gb/brands/wypall-brand-industrial-wipes",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "skf_nipples",
+      "title": "SKF · Engrasadores",
+      "url": "https://www.skf.com/mm/0901d1968005021c",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "osha_inspect",
+      "title": "OSHA · 1926.1412, inspecciones",
+      "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1926/1926.1412",
+      "kind": "authority",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "osha_operate",
+      "title": "OSHA · 1926.1417, operación",
+      "url": "https://www.osha.gov/laws-regs/regulations/standardnumber/1926/1926.1417",
+      "kind": "authority",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "manitowoc_lube",
+      "title": "Manitowoc · Guía de lubricación F2314",
+      "url": "https://www.manitowoc.com/sites/default/files/media/divers/file/2021-09/Lubrication%20Guide_F2314_07-20-2021.pdf",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    },
+    {
+      "id": "manitowoc_manuals",
+      "title": "Manitowoc · Manuales de referencia",
+      "url": "https://www.manitowoc.com/manuals?page=2",
+      "kind": "manufacturer",
+      "verifiedDate": "2026-09-24"
+    }
+  ]
+}
