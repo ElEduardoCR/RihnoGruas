@@ -37,6 +37,7 @@ export interface FocusItem {
   response_type?: "ok_falla" | "numero" | "texto";
   unit?: string;
   photo_hint?: string;
+  min_photos?: number;
 }
 
 /**
@@ -155,6 +156,7 @@ export function composeInspectionItems(
       min_value: null,
       max_value: null,
       requires_photo: true,
+      min_photos: f.min_photos ?? 1,
       photo_hint: f.photo_hint ?? null,
       critical: f.critical ?? false,
       source: "agente",
@@ -174,6 +176,7 @@ export function composeInspectionItems(
       min_value: t.min_value,
       max_value: t.max_value,
       requires_photo: t.requires_photo,
+      min_photos: t.min_photos,
       photo_hint: t.photo_hint,
       critical: t.critical,
       source: "plantilla",
@@ -193,6 +196,7 @@ export function composeInspectionItems(
       min_value: null,
       max_value: null,
       requires_photo: c.requires_photo,
+      min_photos: c.min_photos,
       photo_hint: c.photo_hint,
       critical: c.critical,
       source: "grua",
@@ -220,6 +224,9 @@ export function scoreInspection(items: InspectionItem[]) {
   }
   return { score: Math.max(0, Math.min(100, 100 - penalty)), flags: [...flags] };
 }
+
+/** Máximo de fotos por punto (cada una se comprime a ~300 KB en el teléfono). */
+export const MAX_PHOTOS_PER_ITEM = 8;
 
 export const FLAG_PENALTY: Record<string, number> = {
   respuesta_rapida: 4,

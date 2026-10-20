@@ -31,7 +31,7 @@ import type {
 } from "@/lib/types";
 import { composeInspectionItems, deriveFocusItems, inspectionResult, scoreInspection } from "@/lib/domain/checklists";
 import { addDays, dayKey, startOfDay, zonedDate, zonedParts } from "@/lib/time";
-import { TEMPLATE_DEFS } from "./templates";
+import { MULTI_PHOTO, TEMPLATE_DEFS } from "./templates";
 import { KNOWLEDGE } from "./knowledge";
 
 export type SeedData = { [K in TableName]: Tables[K][] };
@@ -311,7 +311,7 @@ export function buildSeed(now: Date): SeedData {
     def.items.forEach(([section, title, instructions, photo_hint, critical, response_type, unit, min, max], i) =>
       templateItems.push({
         id: uid(), template_id: t.id, position: i, section, title, instructions, response_type: response_type ?? "ok_falla",
-        unit: unit ?? null, min_value: min ?? null, max_value: max ?? null, requires_photo: true, photo_hint, critical, created_at: created,
+        unit: unit ?? null, min_value: min ?? null, max_value: max ?? null, requires_photo: true, min_photos: MULTI_PHOTO[title] ?? 1, photo_hint, critical, created_at: created,
       }),
     );
   }
@@ -320,12 +320,12 @@ export function buildSeed(now: Date): SeedData {
 
   const craneItems: CraneChecklistItem[] = [];
   const ci = (c: Crane, section: string, title: string, instructions: string, reason: string, critical = false, extra: Partial<CraneChecklistItem> = {}) =>
-    craneItems.push({ id: uid(), crane_id: c.id, section, title, instructions, response_type: "ok_falla", unit: null, requires_photo: true, photo_hint: null, critical, reason, active: true, created_at: created, ...extra });
+    craneItems.push({ id: uid(), crane_id: c.id, section, title, instructions, response_type: "ok_falla", unit: null, requires_photo: true, min_photos: 1, photo_hint: null, critical, reason, active: true, created_at: created, ...extra });
   ci(rh04, "Sistema hidráulico", "Sello del cilindro telescópico", "Extiende el telescópico al 100% y espera 5 minutos. No debe haber escurrimiento ni descenso.", "Reparado hace un mes", true, { photo_hint: "Foto del vástago extendido" });
   ci(rh02, "Cables y gancho", "Diámetro del cable principal", "Mide con vernier a 1 m del gancho. Mínimo permitido 15.2 mm.", "Cable al 70% de vida útil", true, { response_type: "numero", unit: "mm", photo_hint: "Foto del vernier sobre el cable" });
   ci(rh06, "Sistema hidráulico", "Bomba hidráulica principal", "Revisa escurrimientos en la base de la bomba con el motor encendido.", "Historial de fuga en bomba", true, { photo_hint: "Foto de la base de la bomba" });
   ci(rh08, "Seguridad", "Sistema anticolisión con grúa vecina", "Prueba la zona restringida configurada contra la grúa de la obra colindante.", "Obra con dos grúas torre", true, { photo_hint: "Foto de la pantalla del anticolisión" });
-  ci(rh10, "Orugas", "Zapatas y rodillos de oruga", "Revisa zapatas fracturadas y rodillos sin giro. Cuenta pernos de zapata.", "Rodillos cambiados hace 3 semanas", false, { photo_hint: "Foto de la oruga izquierda" });
+  ci(rh10, "Orugas", "Zapatas y rodillos de oruga", "Revisa zapatas fracturadas y rodillos sin giro. Cuenta pernos de zapata.", "Rodillos cambiados hace 3 semanas", false, { photo_hint: "Una foto de cada oruga", min_photos: 2 });
   ci(rh07, "Estructura y pluma", "Soldadura en base de la pluma", "Revisa la soldadura reforzada en la base de la pluma: sin fisuras.", "Refuerzo estructural en 2023", true, { photo_hint: "Foto de la soldadura" });
 
   // ------------------------------------------------------------------ inspecciones
@@ -369,8 +369,9 @@ export function buildSeed(now: Date): SeedData {
         t += secs * 1000;
         it.answered_at = new Date(t).toISOString();
         it.seconds_spent = secs;
-        it.photo_paths = [`demo/${insp.id}/${i}.jpg`];
-        it.photo_hashes = [opts.answer!.dupPhotos && (i === 4 || i === 6) ? dupHash : hex()];
+        const n = Math.max(1, it.min_photos);
+        it.photo_paths = Array.from({ length: n }, (_, k) => `demo/${insp.id}/${i}-${k}.jpg`);
+        it.photo_hashes = Array.from({ length: n }, (_, k) => (k === 0 && opts.answer!.dupPhotos && (i === 4 || i === 6) ? dupHash : hex()));
         it.photo_taken_at = it.answered_at;
         const fail = opts.answer!.failTitles?.[it.title];
         if (it.response_type === "numero") {

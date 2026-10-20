@@ -1,6 +1,7 @@
 import type { Db } from "@/lib/db/types";
 import type { ChecklistKind, Crane, Inspection, InspectionItem, Rental } from "@/lib/types";
 import {
+  MAX_PHOTOS_PER_ITEM,
   composeInspectionItems,
   deriveFocusItems,
   inspectionResult,
@@ -82,7 +83,7 @@ export async function scheduleInspection(
         db,
         op,
         `🛠️ *${inspection.title}*\n${crane.name} · ${fmt.dateTime(inspection.scheduled_for)}\n` +
-          `${drafts.length} puntos${focus.length ? `, ${focus.length} específicos para esta grúa` : ""}. Cada punto requiere foto.\n` +
+          `${drafts.length} puntos${focus.length ? `, ${focus.length} específicos para esta grúa` : ""}. Cada punto requiere foto (algunos piden varias).\n` +
           `Ábrela aquí cuando estés frente a la grúa: ${inspectionLink(inspection.access_token)}`,
         "sistema",
       );
@@ -158,6 +159,39 @@ export async function startInspection(
 
 const MIN_SECONDS = 5;
 const MAX_PHOTO_AGE_MS = 15 * 60_000;
+const HASH_RE = /^[a-f0-9]{64}$/;
+
+export interface PhotoRef {
+  path: string;
+  hash: string;
+  takenAt: string | null;
+}
+
+/**
+ * Sube una foto de evidencia en cuanto el operador la toma (no al final del
+ * punto), para que una mala señal no haga perder varias fotos. Rechaza al
+ * momento una foto que ya se usó en otro punto de la misma revisión.
+ */
+export async function uploadItemPhoto(
+  db: Db,
+  token: string,
+  itemId: string,
+  file: { bytes: Uint8Array; contentType: string; hash: string; takenAt: string | null },
+): Promise<PhotoRef> {
+  const data = await getInspectionByToken(db, token);
+  if (!data) throw new Error("Revisión no encontrada");
+  if (data.inspection.status === "completada") throw new Error("La revisión ya fue cerrada");
+  const item = data.items.find((i) => i.id === itemId);
+  if (!item) throw new Error("Punto no encontrado");
+  if (!HASH_RE.test(file.hash)) throw new Error("Foto inválida, tómala de nuevo.");
+  if (data.items.some((i) => i.id !== itemId && i.photo_hashes.includes(file.hash))) {
+    throw new Error("Esta foto ya se usó en otro punto. Toma una foto nueva de este punto.");
+  }
+  const ext = file.contentType.includes("png") ? "png" : "jpg";
+  const path = `${data.inspection.id}/${itemId}-${Date.now()}-${file.hash.slice(0, 8)}.${ext}`;
+  await db.upload("evidencias", path, { bytes: file.bytes, contentType: file.contentType || "image/jpeg" });
+  return { path, hash: file.hash, takenAt: file.takenAt };
+}
 
 export async function answerItem(
   db: Db,
@@ -169,7 +203,8 @@ export async function answerItem(
     valueText: string | null;
     notes: string | null;
     shownAt: string;
-    photo: { path: string; hash: string; takenAt: string | null } | null;
+    /** Lista final de fotos del punto (las ya guardadas que se conservan + las nuevas). */
+    photos: PhotoRef[];
   },
 ) {
   const data = await getInspectionByToken(db, token);
@@ -183,23 +218,32 @@ export async function answerItem(
   const seconds = Math.max(0, Math.round((now - Date.parse(input.shownAt)) / 1000));
   if (seconds < MIN_SECONDS) flags.add("respuesta_rapida");
 
-  const photoPaths = input.photo ? [input.photo.path] : item.photo_paths;
-  const photoHashes = input.photo ? [input.photo.hash] : item.photo_hashes;
-  if (item.requires_photo && photoPaths.length === 0) throw new Error("Este punto requiere foto");
-
-  if (input.photo) {
-    // misma foto usada en otro punto de esta revisión → se rechaza
-    if (data.items.some((i) => i.id !== itemId && i.photo_hashes.includes(input.photo!.hash))) {
-      throw new Error("Esta foto ya se usó en otro punto. Toma una foto nueva de este punto.");
-    }
-    // misma foto usada en revisiones anteriores → se marca
-    const prior = await findHashElsewhere(db, input.photo.hash, data.inspection.id);
-    if (prior) flags.add("foto_duplicada");
-    if (input.photo.takenAt) {
-      const startedAt = Date.parse(data.inspection.started_at ?? data.inspection.created_at);
-      if (Date.parse(input.photo.takenAt) < startedAt - MAX_PHOTO_AGE_MS) flags.add("foto_antigua");
-    }
+  // Fotos: las ya guardadas conservan su hash original; las nuevas deben ser de esta revisión
+  const saved = new Map(item.photo_paths.map((p, i) => [p, item.photo_hashes[i]]));
+  const photos = input.photos.map((p) => {
+    if (saved.has(p.path)) return { ...p, hash: saved.get(p.path)!, isNew: false };
+    if (!p.path.startsWith(`${data.inspection.id}/`) || !HASH_RE.test(p.hash)) throw new Error("Foto inválida, tómala de nuevo.");
+    return { ...p, isNew: true };
+  });
+  if (photos.length > MAX_PHOTOS_PER_ITEM) throw new Error(`Máximo ${MAX_PHOTOS_PER_ITEM} fotos por punto.`);
+  const needed = item.requires_photo ? Math.max(1, item.min_photos) : 0;
+  if (photos.length < needed) {
+    throw new Error(needed === 1 ? "Este punto requiere foto" : `Este punto requiere ${needed} fotos (llevas ${photos.length}).`);
   }
+  const hashes = photos.map((p) => p.hash);
+  if (new Set(hashes).size !== hashes.length) throw new Error("Repetiste la misma foto en este punto. Toma una diferente.");
+  if (data.items.some((i) => i.id !== itemId && i.photo_hashes.some((h) => hashes.includes(h)))) {
+    throw new Error("Una de las fotos ya se usó en otro punto. Toma una foto nueva de este punto.");
+  }
+  const startedAt = Date.parse(data.inspection.started_at ?? data.inspection.created_at);
+  for (const p of photos.filter((x) => x.isNew)) {
+    // misma foto usada en revisiones anteriores → se marca
+    if (await findHashElsewhere(db, p.hash, data.inspection.id)) flags.add("foto_duplicada");
+    if (p.takenAt && Date.parse(p.takenAt) < startedAt - MAX_PHOTO_AGE_MS) flags.add("foto_antigua");
+  }
+  // Si se conservaron todas las fotos anteriores, se conservan sus señales
+  const keptAll = item.photo_paths.length > 0 && item.photo_paths.every((path) => photos.some((p) => p.path === path));
+  if (keptAll) for (const f of item.flags) if (f === "foto_duplicada" || f === "foto_antigua" || f === "foto_no_coincide") flags.add(f);
 
   if (item.response_type === "ok_falla" && input.passed === null) throw new Error("Indica si el punto está OK o tiene falla");
   if (item.response_type === "numero" && (input.valueNumber == null || Number.isNaN(input.valueNumber))) {
@@ -216,14 +260,15 @@ export async function answerItem(
   if (item.response_type === "texto") passed = true;
   if (passed === false && !input.notes?.trim()) throw new Error("Describe la falla encontrada");
 
+  const takenTimes = photos.map((p) => p.takenAt).filter((t): t is string => Boolean(t)).sort();
   return db.update("inspection_items", itemId, {
     passed,
     value_number: input.valueNumber,
     value_text: input.valueText,
     notes: input.notes?.trim() || null,
-    photo_paths: photoPaths,
-    photo_hashes: photoHashes,
-    photo_taken_at: input.photo?.takenAt ?? item.photo_taken_at,
+    photo_paths: photos.map((p) => p.path),
+    photo_hashes: hashes,
+    photo_taken_at: takenTimes[0] ?? item.photo_taken_at,
     shown_at: input.shownAt,
     answered_at: new Date(now).toISOString(),
     seconds_spent: seconds,

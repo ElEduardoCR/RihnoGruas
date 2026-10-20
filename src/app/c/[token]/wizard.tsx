@@ -1,12 +1,13 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, ArrowLeft, Bot, Camera, Check, CheckCircle2, ChevronRight, Loader2, MapPin, RefreshCcw, ShieldX, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, Bot, Camera, Check, CheckCircle2, ChevronRight, Loader2, MapPin, Plus, ShieldX, X } from "lucide-react";
 import type { CraneType } from "@/lib/types";
 import { CraneArt, RhinoMark } from "@/components/brand";
 import { cx } from "@/components/ui";
 import { compressImage as compress } from "@/lib/client-image";
-import { completeAction, saveStepAction, startAction } from "./actions";
+import { MAX_PHOTOS_PER_ITEM as MAX_PHOTOS } from "@/lib/domain/checklists";
+import { completeAction, saveStepAction, startAction, uploadPhotoAction } from "./actions";
 import type { WizardItem } from "./types";
 
 interface Props {
@@ -17,7 +18,6 @@ interface Props {
   initialItems: WizardItem[];
 }
 
-type Photo = { blob: Blob; url: string; hash: string; takenAt: string };
 
 async function sha256(buf: ArrayBuffer) {
   const d = await crypto.subtle.digest("SHA-256", buf);
@@ -78,6 +78,7 @@ export function Wizard({ token, inspection, crane, assignee, initialItems }: Pro
             item={items[step]}
             index={step}
             total={items.length}
+            otherHashes={items.filter((x) => x.id !== items[step].id).flatMap((x) => x.photos.map((p) => p.hash))}
             onBack={() => setStep(Math.max(0, step - 1))}
             onSaved={(it) => {
               const next = items.map((x) => (x.id === it.id ? it : x));
@@ -127,7 +128,7 @@ function Intro({
     await onStart(coords);
     setBusy(false);
   };
-  const fmtDate = (s: string) => new Intl.DateTimeFormat("es-MX", { timeZone: "America/Mexico_City", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit" }).format(new Date(s));
+  const fmtDate = (s: string) => new Intl.DateTimeFormat("es-MX", { timeZone: "America/Mexico_City", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(s));
   return (
     <div className="flex flex-1 flex-col">
       <div className="rounded-[28px] bg-canvas px-6 pt-6 pb-2">
@@ -155,7 +156,7 @@ function Intro({
       )}
 
       <ul className="mt-6 space-y-3 text-[14px] text-ink-2">
-        <li className="flex gap-3"><Camera className="size-5 shrink-0 text-rhino-500" />Cada punto requiere una foto tomada en este momento.</li>
+        <li className="flex gap-3"><Camera className="size-5 shrink-0 text-rhino-500" />Cada punto requiere al menos una foto tomada en este momento; algunos piden varias (p. ej. los 4 lados).</li>
         <li className="flex gap-3"><MapPin className="size-5 shrink-0 text-rhino-500" />Debes estar frente a la grúa; se registra la ubicación al iniciar.</li>
         <li className="flex gap-3"><AlertTriangle className="size-5 shrink-0 text-rhino-500" />Si algo falla, descríbelo. Las fallas críticas detienen la grúa.</li>
       </ul>
@@ -170,10 +171,39 @@ function Intro({
   );
 }
 
-function Step({ token, item, index, total, onBack, onSaved }: { token: string; item: WizardItem; index: number; total: number; onBack: () => void; onSaved: (it: WizardItem) => void }) {
+type Shot = {
+  key: string;
+  url: string;
+  path: string | null;
+  hash: string;
+  takenAt: string | null;
+  status: "subiendo" | "lista" | "error";
+  error?: string;
+};
+
+function Step({
+  token,
+  item,
+  index,
+  total,
+  otherHashes,
+  onBack,
+  onSaved,
+}: {
+  token: string;
+  item: WizardItem;
+  index: number;
+  total: number;
+  otherHashes: string[];
+  onBack: () => void;
+  onSaved: (it: WizardItem) => void;
+}) {
   const shownAt = useRef(new Date().toISOString());
   const fileRef = useRef<HTMLInputElement>(null);
-  const [photo, setPhoto] = useState<Photo | null>(null);
+  const blobUrls = useRef<string[]>([]);
+  const [shots, setShots] = useState<Shot[]>(() =>
+    item.photos.map((p) => ({ key: p.path, url: `/api/files/evidencias/${p.path}?t=${token}`, path: p.path, hash: p.hash, takenAt: p.takenAt, status: "lista" as const })),
+  );
   const [passed, setPassed] = useState<boolean | null>(item.answered ? item.passed : null);
   const [value, setValue] = useState(item.response_type === "numero" ? (item.value_number?.toString() ?? "") : (item.value_text ?? ""));
   const [notes, setNotes] = useState(item.notes ?? "");
@@ -181,40 +211,62 @@ function Step({ token, item, index, total, onBack, onSaved }: { token: string; i
   const [pending, start] = useTransition();
   const [processing, setProcessing] = useState(false);
 
-  useEffect(() => () => {
-    if (photo) URL.revokeObjectURL(photo.url);
-  }, [photo]);
+  useEffect(() => () => blobUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
-  const existingPhoto = item.photo ? `/api/files/evidencias/${item.photo}?t=${token}` : null;
-  const hasPhoto = Boolean(photo || item.photo);
+  const needed = item.requires_photo ? Math.max(1, item.min_photos) : 0;
+  const ready = shots.filter((s) => s.status === "lista");
+  const uploading = shots.some((s) => s.status === "subiendo");
+  const missingPhotos = Math.max(0, needed - ready.length);
+  const canAdd = shots.length < MAX_PHOTOS;
   const answerOk = item.response_type === "ok_falla" ? passed !== null : item.response_type === "numero" ? value.trim() !== "" && !Number.isNaN(Number(value)) : value.trim().length > 1;
   const needsNotes = passed === false && notes.trim().length < 4;
-  const canNext = (!item.requires_photo || hasPhoto) && answerOk && !needsNotes;
+  const canNext = missingPhotos === 0 && !uploading && answerOk && !needsNotes;
 
   const onFile = async (f: File | undefined) => {
     if (!f) return;
     setError(null);
     setProcessing(true);
     const hash = await sha256(await f.arrayBuffer());
+    if (shots.some((s) => s.hash === hash)) {
+      setProcessing(false);
+      return setError("Ya agregaste esta misma foto a este punto. Toma otra.");
+    }
+    if (otherHashes.includes(hash)) {
+      setProcessing(false);
+      return setError("Esta foto ya se usó en otro punto. Toma una foto nueva de este punto.");
+    }
     const blob = await compress(f);
-    setPhoto({ blob, url: URL.createObjectURL(blob), hash, takenAt: new Date(f.lastModified || Date.now()).toISOString() });
     setProcessing(false);
+    const key = `${Date.now()}-${hash.slice(0, 6)}`;
+    const takenAt = new Date(f.lastModified || Date.now()).toISOString();
+    const url = URL.createObjectURL(blob);
+    blobUrls.current.push(url);
+    setShots((list) => [...list, { key, url, path: null, hash, takenAt, status: "subiendo" }]);
+    // Se sube en cuanto se toma: si falla la señal sólo se repite esa foto
+    const fd = new FormData();
+    fd.set("photo", blob, "foto.jpg");
+    fd.set("hash", hash);
+    fd.set("takenAt", takenAt);
+    const r = await uploadPhotoAction(token, item.id, fd);
+    setShots((list) => list.map((x) => (x.key !== key ? x : r.ok ? { ...x, path: r.photo.path, status: "lista" } : { ...x, status: "error", error: r.error })));
+    if (!r.ok) setError(r.error);
+  };
+
+  const remove = (key: string) => {
+    setError(null);
+    setShots((list) => list.filter((x) => x.key !== key));
   };
 
   const submit = () =>
     start(async () => {
       setError(null);
-      const fd = new FormData();
-      if (photo) {
-        fd.set("photo", photo.blob, "foto.jpg");
-        fd.set("hash", photo.hash);
-        fd.set("takenAt", photo.takenAt);
-      }
-      fd.set("shownAt", shownAt.current);
-      if (item.response_type === "ok_falla") fd.set("passed", String(passed));
-      fd.set("value", value);
-      fd.set("notes", notes);
-      const r = await saveStepAction(token, item.id, fd);
+      const r = await saveStepAction(token, item.id, {
+        passed: item.response_type === "ok_falla" ? passed : null,
+        value,
+        notes,
+        shownAt: shownAt.current,
+        photos: ready.map((s) => ({ path: s.path!, hash: s.hash, takenAt: s.takenAt })),
+      });
       if (!r.ok) return setError(r.error);
       onSaved(r.item);
     });
@@ -233,34 +285,89 @@ function Step({ token, item, index, total, onBack, onSaved }: { token: string; i
       )}
       {item.instructions && <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{item.instructions}</p>}
 
-      {/* Foto */}
-      <input ref={fileRef} type="file" accept="image/*" capture="environment" className="hidden" onChange={(e) => onFile(e.target.files?.[0])} />
-      <button
-        type="button"
-        onClick={() => fileRef.current?.click()}
-        className={cx(
-          "relative mt-5 flex aspect-[4/3] w-full flex-col items-center justify-center overflow-hidden rounded-[24px] border-2 border-dashed transition",
-          hasPhoto ? "border-transparent" : "border-line-2 bg-canvas active:bg-line",
+      {/* Fotos */}
+      <input
+        ref={fileRef}
+        type="file"
+        accept="image/*"
+        capture="environment"
+        className="hidden"
+        onChange={(e) => {
+          const f = e.target.files?.[0];
+          e.target.value = ""; // permite volver a elegir
+          onFile(f);
+        }}
+      />
+      <div className="mt-5 flex items-baseline justify-between">
+        <span className="text-[13px] font-medium text-ink-2">{item.photo_hint ?? "Foto del punto revisado"}</span>
+        {(needed > 1 || shots.length > 1) && (
+          <span className={cx("tabular text-[13px] font-semibold", missingPhotos ? "text-rhino-600" : "text-ok")}>
+            {ready.length}
+            {needed > 1 ? ` / ${needed}` : ""} fotos
+          </span>
         )}
-      >
-        {photo || existingPhoto ? (
-          <>
-            {/* eslint-disable-next-line @next/next/no-img-element */}
-            <img src={photo?.url ?? existingPhoto!} alt="Evidencia" className="absolute inset-0 size-full object-cover" />
-            <span className="absolute right-3 bottom-3 inline-flex items-center gap-1.5 rounded-full bg-black/70 px-3 py-1.5 text-[13px] font-medium text-white backdrop-blur">
-              <RefreshCcw className="size-3.5" /> Repetir foto
-            </span>
-          </>
-        ) : processing ? (
-          <Loader2 className="size-8 animate-spin text-muted" />
-        ) : (
-          <>
-            <span className="grid size-16 place-items-center rounded-full bg-ink text-white"><Camera className="size-7" /></span>
-            <span className="mt-3 text-[16px] font-semibold">Tomar foto</span>
-            <span className="mt-1 px-6 text-center text-[13px] text-muted">{item.photo_hint ?? "Foto del punto revisado"}</span>
-          </>
-        )}
-      </button>
+      </div>
+      {shots.length === 0 ? (
+        <button
+          type="button"
+          onClick={() => fileRef.current?.click()}
+          className="mt-2 flex aspect-[4/3] w-full flex-col items-center justify-center rounded-[24px] border-2 border-dashed border-line-2 bg-canvas transition active:bg-line"
+        >
+          {processing ? (
+            <Loader2 className="size-8 animate-spin text-muted" />
+          ) : (
+            <>
+              <span className="grid size-16 place-items-center rounded-full bg-ink text-white"><Camera className="size-7" /></span>
+              <span className="mt-3 text-[16px] font-semibold">Tomar foto</span>
+              <span className="mt-1 px-6 text-center text-[13px] text-muted">
+                {needed > 1 ? `Este punto pide ${needed} fotos` : "Foto tomada en este momento"}
+              </span>
+            </>
+          )}
+        </button>
+      ) : (
+        <div className="mt-2 grid grid-cols-2 gap-2">
+          {shots.map((s, i) => (
+            <div key={s.key} className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-canvas">
+              {/* eslint-disable-next-line @next/next/no-img-element */}
+              <img src={s.url} alt={`Evidencia ${i + 1}`} className="absolute inset-0 size-full object-cover" />
+              <span className="absolute bottom-2 left-2 grid size-6 place-items-center rounded-full bg-black/65 text-[12px] font-semibold text-white">{i + 1}</span>
+              {s.status === "subiendo" && (
+                <div className="absolute inset-0 grid place-items-center bg-black/35">
+                  <Loader2 className="size-7 animate-spin text-white" />
+                </div>
+              )}
+              {s.status === "error" && (
+                <div className="absolute inset-0 flex items-center justify-center bg-rhino-600/80 px-3 text-center text-[12px] font-medium text-white">No se subió · quítala y tómala de nuevo</div>
+              )}
+              <button
+                type="button"
+                onClick={() => remove(s.key)}
+                disabled={s.status === "subiendo"}
+                className="absolute top-2 right-2 grid size-8 place-items-center rounded-full bg-black/65 text-white backdrop-blur disabled:opacity-40"
+                aria-label={`Quitar foto ${i + 1}`}
+              >
+                <X className="size-4" />
+              </button>
+            </div>
+          ))}
+          {canAdd && (
+            <button
+              type="button"
+              onClick={() => fileRef.current?.click()}
+              disabled={processing}
+              className={cx(
+                "flex aspect-[4/3] flex-col items-center justify-center rounded-2xl border-2 border-dashed transition active:bg-line",
+                missingPhotos ? "border-rhino-200 bg-rhino-50/50 text-rhino-700" : "border-line-2 bg-canvas text-ink-2",
+              )}
+            >
+              {processing ? <Loader2 className="size-6 animate-spin" /> : <Plus className="size-6" />}
+              <span className="mt-1.5 text-[14px] font-semibold">Agregar foto</span>
+              {missingPhotos > 0 && <span className="text-[12px]">faltan {missingPhotos}</span>}
+            </button>
+          )}
+        </div>
+      )}
 
       {/* Respuesta */}
       {item.response_type === "ok_falla" && (
@@ -311,7 +418,19 @@ function Step({ token, item, index, total, onBack, onSaved }: { token: string; i
       </div>
       {!canNext && !pending && (
         <p className="mt-2 text-center text-[12px] text-muted">
-          {item.requires_photo && !hasPhoto ? "Falta la foto" : !answerOk ? "Falta tu respuesta" : needsNotes ? "Describe la falla" : ""}
+          {uploading
+            ? "Subiendo fotos…"
+            : missingPhotos
+              ? needed === 1
+                ? "Falta la foto"
+                : missingPhotos === 1
+                  ? "Falta 1 foto"
+                  : `Faltan ${missingPhotos} fotos`
+              : !answerOk
+                ? "Falta tu respuesta"
+                : needsNotes
+                  ? "Describe la falla"
+                  : ""}
         </p>
       )}
     </div>

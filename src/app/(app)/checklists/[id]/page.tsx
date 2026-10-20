@@ -76,11 +76,14 @@ async function Report({ params }: { params: Promise<{ id: string }> }) {
                   .filter((i) => i.section === s)
                   .map((it) => (
                     <li key={it.id} className="flex gap-4 py-4">
-                      <div className="size-[88px] shrink-0 overflow-hidden rounded-2xl bg-canvas">
+                      <div className="relative size-[88px] shrink-0 overflow-hidden rounded-2xl bg-canvas">
                         {it.photo_paths[0] ? (
                           <a href={`/api/files/evidencias/${it.photo_paths[0]}`} target="_blank">
                             {/* eslint-disable-next-line @next/next/no-img-element -- evidencia privada servida por /api/files */}
                             <img src={`/api/files/evidencias/${it.photo_paths[0]}`} alt={it.title} className="size-full object-cover" />
+                            {it.photo_paths.length > 1 && (
+                              <span className="absolute right-1.5 bottom-1.5 rounded-full bg-black/70 px-1.5 py-0.5 text-[11px] font-semibold text-white">{it.photo_paths.length} fotos</span>
+                            )}
                           </a>
                         ) : (
                           <div className="grid size-full place-items-center text-[11px] text-faint">Sin foto</div>
@@ -121,6 +124,17 @@ async function Report({ params }: { params: Promise<{ id: string }> }) {
                           )}
                         </div>
                         {it.notes && <p className="mt-2 rounded-xl bg-rhino-50 px-3 py-2 text-[13px] text-rhino-700">{it.notes}</p>}
+                        {it.photo_paths.length > 1 && (
+                          <div className="mt-3 flex flex-wrap gap-2">
+                            {it.photo_paths.map((path, k) => (
+                              <a key={path} href={`/api/files/evidencias/${path}`} target="_blank" className="relative block size-16 overflow-hidden rounded-xl bg-canvas">
+                                {/* eslint-disable-next-line @next/next/no-img-element -- evidencia privada servida por /api/files */}
+                                <img src={`/api/files/evidencias/${path}`} alt={`${it.title} · foto ${k + 1}`} className="size-full object-cover" />
+                                <span className="absolute bottom-1 left-1 grid size-4 place-items-center rounded-full bg-black/65 text-[10px] font-semibold text-white">{k + 1}</span>
+                              </a>
+                            ))}
+                          </div>
+                        )}
                       </div>
                     </li>
                   ))}

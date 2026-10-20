@@ -35,6 +35,7 @@ Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión gr�
 
 ### Checklists que sí se llenan con conciencia
 - Wizard: **un punto por pantalla**, no se puede avanzar sin foto y respuesta; una falla exige descripción.
+- **Varias fotos por punto** (hasta 8): cada punto define un mínimo (`min_photos`), p. ej. 4 para “daños visibles” (un lado por foto) o 2 para “tarjeta y póliza”. Cada foto se sube en cuanto se toma y se puede quitar o repetir.
 - Foto tomada con la cámara en el momento: se rechaza una **foto repetida** dentro de la revisión y se marcan fotos usadas en revisiones anteriores o tomadas antes de iniciar.
 - **Tiempo por punto**: respuestas en menos de 5 s se marcan como apresuradas.
 - Ubicación al iniciar, firma y declaración al cerrar.
@@ -99,7 +100,7 @@ Abre http://localhost:3000. Sin variables de Supabase la app arranca en **modo d
 
 ### 1. Supabase
 1. Crea un proyecto en Supabase.
-2. Ejecuta la migración `supabase/migrations/20261016000000_init.sql` (SQL Editor, o `supabase link` + `supabase db push`). Crea tablas, restricciones (p. ej. una grúa no puede rentarse dos veces en el mismo horario), RLS, buckets privados `evidencias` y `documentos`, y la función de búsqueda vectorial.
+2. Ejecuta las migraciones de `supabase/migrations/` en orden (SQL Editor, o `supabase link` + `supabase db push`). Crea tablas, restricciones (p. ej. una grúa no puede rentarse dos veces en el mismo horario), RLS, buckets privados `evidencias` y `documentos`, y la función de búsqueda vectorial.
 3. Copia `.env.example` a `.env.local` y llena las variables de Supabase.
 4. Carga datos:
    - Para probar con datos de ejemplo: `npm run db:seed`

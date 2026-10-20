@@ -2,7 +2,7 @@
 
 import { after } from "next/server";
 import { getAdminDb } from "@/lib/db";
-import { answerItem, completeInspection, getInspectionByToken, startInspection } from "@/lib/services/inspections";
+import { answerItem, completeInspection, startInspection, uploadItemPhoto, type PhotoRef } from "@/lib/services/inspections";
 import { verifyInspectionPhotos } from "@/lib/agent/vision-check";
 import { toWizardItem, type WizardItem } from "./types";
 
@@ -14,34 +14,38 @@ export async function startAction(token: string, coords: { lat: number; lng: num
   return { ok: true };
 }
 
-export async function saveStepAction(token: string, itemId: string, fd: FormData): Promise<{ ok: true; item: WizardItem } | { ok: false; error: string }> {
+/** Sube una foto en cuanto se toma. */
+export async function uploadPhotoAction(token: string, itemId: string, fd: FormData): Promise<{ ok: true; photo: PhotoRef } | { ok: false; error: string }> {
   try {
-    const db = getAdminDb();
-    const data = await getInspectionByToken(db, token);
-    if (!data) return { ok: false, error: "Revisión no encontrada" };
     const photo = fd.get("photo");
-    let uploaded: { path: string; hash: string; takenAt: string | null } | null = null;
-    if (photo instanceof Blob && photo.size > 0) {
-      const hash = String(fd.get("hash") ?? "");
-      if (!/^[a-f0-9]{64}$/.test(hash)) return { ok: false, error: "Foto inválida, tómala de nuevo." };
-      // la foto repetida se valida antes de subirla
-      if (data.items.some((i) => i.id !== itemId && i.photo_hashes.includes(hash))) {
-        return { ok: false, error: "Esta foto ya se usó en otro punto. Toma una foto nueva de este punto." };
-      }
-      const path = `${data.inspection.id}/${itemId}-${Date.now()}.jpg`;
-      await db.upload("evidencias", path, { bytes: new Uint8Array(await photo.arrayBuffer()), contentType: photo.type || "image/jpeg" });
-      const takenAt = fd.get("takenAt");
-      uploaded = { path, hash, takenAt: typeof takenAt === "string" && takenAt ? takenAt : null };
-    }
-    const passedRaw = fd.get("passed");
-    const value = fd.get("value");
-    const item = await answerItem(db, token, itemId, {
-      passed: passedRaw === "true" ? true : passedRaw === "false" ? false : null,
-      valueNumber: typeof value === "string" && value.trim() !== "" && !Number.isNaN(Number(value)) ? Number(value) : null,
-      valueText: typeof value === "string" && value.trim() !== "" ? value.trim() : null,
-      notes: (fd.get("notes") as string) || null,
-      shownAt: String(fd.get("shownAt") ?? new Date().toISOString()),
-      photo: uploaded,
+    if (!(photo instanceof Blob) || photo.size === 0) return { ok: false, error: "No se recibió la foto." };
+    const takenAt = fd.get("takenAt");
+    const ref = await uploadItemPhoto(getAdminDb(), token, itemId, {
+      bytes: new Uint8Array(await photo.arrayBuffer()),
+      contentType: photo.type || "image/jpeg",
+      hash: String(fd.get("hash") ?? ""),
+      takenAt: typeof takenAt === "string" && takenAt ? takenAt : null,
+    });
+    return { ok: true, photo: ref };
+  } catch (e) {
+    return { ok: false, error: e instanceof Error ? e.message : "No se pudo subir la foto" };
+  }
+}
+
+export async function saveStepAction(
+  token: string,
+  itemId: string,
+  input: { passed: boolean | null; value: string; notes: string; shownAt: string; photos: PhotoRef[] },
+): Promise<{ ok: true; item: WizardItem } | { ok: false; error: string }> {
+  try {
+    const value = input.value.trim();
+    const item = await answerItem(getAdminDb(), token, itemId, {
+      passed: input.passed,
+      valueNumber: value !== "" && !Number.isNaN(Number(value)) ? Number(value) : null,
+      valueText: value || null,
+      notes: input.notes || null,
+      shownAt: input.shownAt,
+      photos: input.photos,
     });
     return { ok: true, item: toWizardItem(item) };
   } catch (e) {

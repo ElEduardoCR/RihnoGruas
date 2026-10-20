@@ -181,6 +181,8 @@ export interface ChecklistTemplateItem {
   min_value: number | null;
   max_value: number | null;
   requires_photo: boolean;
+  /** fotos mínimas para dar por evidenciado el punto (p. ej. 4 lados = 4) */
+  min_photos: number;
   photo_hint: string | null;
   critical: boolean;
   created_at: string;
@@ -195,6 +197,8 @@ export interface CraneChecklistItem {
   response_type: ResponseType;
   unit: string | null;
   requires_photo: boolean;
+  /** fotos mínimas para dar por evidenciado el punto (p. ej. 4 lados = 4) */
+  min_photos: number;
   photo_hint: string | null;
   critical: boolean;
   reason: string | null;
@@ -243,6 +247,8 @@ export interface InspectionItem {
   min_value: number | null;
   max_value: number | null;
   requires_photo: boolean;
+  /** fotos mínimas para dar por evidenciado el punto (p. ej. 4 lados = 4) */
+  min_photos: number;
   photo_hint: string | null;
   critical: boolean;
   source: "plantilla" | "grua" | "agente";

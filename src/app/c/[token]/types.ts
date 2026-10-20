@@ -10,6 +10,7 @@ export interface WizardItem {
   min_value: number | null;
   max_value: number | null;
   requires_photo: boolean;
+  min_photos: number;
   photo_hint: string | null;
   critical: boolean;
   source: InspectionItem["source"];
@@ -19,7 +20,7 @@ export interface WizardItem {
   value_number: number | null;
   value_text: string | null;
   notes: string | null;
-  photo: string | null;
+  photos: { path: string; hash: string; takenAt: string | null }[];
   flags: string[];
 }
 
@@ -34,6 +35,7 @@ export function toWizardItem(i: InspectionItem): WizardItem {
     min_value: i.min_value,
     max_value: i.max_value,
     requires_photo: i.requires_photo,
+    min_photos: i.min_photos,
     photo_hint: i.photo_hint,
     critical: i.critical,
     source: i.source,
@@ -43,7 +45,8 @@ export function toWizardItem(i: InspectionItem): WizardItem {
     value_number: i.value_number,
     value_text: i.value_text,
     notes: i.notes,
-    photo: i.photo_paths[0] ?? null,
+    // el hash viaja al cliente sólo para detectar fotos repetidas al instante
+    photos: i.photo_paths.map((path, k) => ({ path, hash: i.photo_hashes[k] ?? "", takenAt: null })),
     flags: i.flags,
   };
 }
