@@ -1,26 +1,128 @@
 @import "tailwindcss";
 
+@theme {
+  /* Marca */
+  --color-rhino-50: #fff2f1;
+  --color-rhino-100: #ffe1de;
+  --color-rhino-200: #ffc7c1;
+  --color-rhino-400: #f4594d;
+  --color-rhino-500: #e3261b;
+  --color-rhino-600: #c81e14;
+  --color-rhino-700: #a3170f;
+
+  /* Neutros estilo Apple */
+  --color-ink: #1d1d1f;
+  --color-ink-2: #424245;
+  --color-muted: #6e6e73;
+  --color-faint: #a1a1a6;
+  --color-line: #e5e5ea;
+  --color-line-2: #d2d2d7;
+  --color-canvas: #f5f5f7;
+  --color-night: #0b0b0c;
+  --color-night-2: #1c1c1e;
+  --color-night-3: #2c2c2e;
+
+  /* Estados de grúa */
+  --color-ok: #138a4a;
+  --color-ok-soft: #e9f7ef;
+  --color-warn: #b45d00;
+  --color-warn-soft: #fff4e0;
+  --color-warn-mid: #f5a524;
+
+  --font-sans: -apple-system, BlinkMacSystemFont, "SF Pro Text", "SF Pro Display", var(--font-inter), "Helvetica Neue", Arial,
+    sans-serif;
+  --font-display: -apple-system, BlinkMacSystemFont, "SF Pro Display", var(--font-inter), "Helvetica Neue", Arial, sans-serif;
+  --font-mono: ui-monospace, "SF Mono", SFMono-Regular, Menlo, monospace;
+
+  --shadow-card: 0 1px 2px rgb(0 0 0 / 0.04), 0 4px 16px rgb(0 0 0 / 0.04);
+  --shadow-pop: 0 10px 40px rgb(0 0 0 / 0.14), 0 2px 6px rgb(0 0 0 / 0.06);
+}
+
 :root {
-  --background: #ffffff;
-  --foreground: #171717;
+  color-scheme: light;
 }
 
-@theme inline {
-  --color-background: var(--background);
-  --color-foreground: var(--foreground);
-  --font-sans: var(--font-geist-sans);
-  --font-mono: var(--font-geist-mono);
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --background: #0a0a0a;
-    --foreground: #ededed;
-  }
+html {
+  -webkit-text-size-adjust: 100%;
 }
 
 body {
-  background: var(--background);
-  color: var(--foreground);
-  font-family: Arial, Helvetica, sans-serif;
+  background: var(--color-canvas);
+  color: var(--color-ink);
+  font-family: var(--font-sans);
+  font-size: 15px;
+  letter-spacing: -0.01em;
+  font-feature-settings: "ss01", "cv11";
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+}
+
+h1,
+h2,
+h3,
+.font-display {
+  font-family: var(--font-display);
+  letter-spacing: -0.025em;
+}
+
+.tabular {
+  font-variant-numeric: tabular-nums;
+}
+
+::selection {
+  background: var(--color-rhino-100);
+  color: var(--color-ink);
+}
+
+/* Scroll horizontal suave para tablas/timelines */
+.scroll-x {
+  overflow-x: auto;
+  scrollbar-width: thin;
+  -webkit-overflow-scrolling: touch;
+}
+
+dialog::backdrop {
+  background: rgb(0 0 0 / 0.35);
+  backdrop-filter: blur(4px);
+}
+
+dialog[open] {
+  animation: pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
+}
+
+@keyframes pop {
+  from {
+    opacity: 0;
+    transform: translateY(8px) scale(0.98);
+  }
+  to {
+    opacity: 1;
+    transform: none;
+  }
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+
+.skeleton {
+  position: relative;
+  overflow: hidden;
+  background: #ececf0;
+  border-radius: 12px;
+}
+.skeleton::after {
+  content: "";
+  position: absolute;
+  inset: 0;
+  transform: translateX(-100%);
+  background: linear-gradient(90deg, transparent, rgb(255 255 255 / 0.6), transparent);
+  animation: shimmer 1.4s infinite;
+}
+
+/* Rayado para eventos "detenida" en calendario */
+.stripes-red {
+  background-image: repeating-linear-gradient(135deg, var(--color-rhino-500) 0 6px, var(--color-rhino-600) 6px 12px);
 }

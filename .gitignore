@@ -39,3 +39,9 @@ yarn-error.log*
 # typescript
 *.tsbuildinfo
 next-env.d.ts
+
+# plantilla de variables (sí se versiona)
+!.env.example
+
+# preview local
+.claude/launch.json
