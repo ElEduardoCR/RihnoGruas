@@ -20,7 +20,14 @@ export const env = {
   waTemplateLang: process.env.WHATSAPP_TEMPLATE_LANG || "es_MX",
 
   cronSecret: process.env.CRON_SECRET ?? "",
-  appUrl: (process.env.APP_URL || process.env.NEXT_PUBLIC_APP_URL || "http://localhost:3000").replace(/\/$/, ""),
+  // En Vercel, si no se define APP_URL se usa el dominio de producción del proyecto
+  appUrl: (
+    process.env.APP_URL ||
+    process.env.NEXT_PUBLIC_APP_URL ||
+    (process.env.VERCEL_PROJECT_PRODUCTION_URL && `https://${process.env.VERCEL_PROJECT_PRODUCTION_URL}`) ||
+    (process.env.VERCEL_URL && `https://${process.env.VERCEL_URL}`) ||
+    "http://localhost:3000"
+  ).replace(/\/$/, ""),
 
   // Reglas de negocio ajustables
   authorizeAboveMxn: Number(process.env.INVENTORY_AUTHORIZE_ABOVE_MXN || 5000),
