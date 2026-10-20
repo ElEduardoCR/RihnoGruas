@@ -59,9 +59,11 @@ async function Calendar({ searchParams }: { searchParams: SP }) {
         title="Calendario"
         subtitle="Rentas, mantenimientos, detenciones y revisiones de toda la flotilla."
         actions={
-          <Modal label="Nueva renta" title="Nueva renta" subtitle="Rhino agenda automáticamente la revisión total del día anterior." icon={<Plus className="size-4" />}>
-            <RentalForm cranes={opts.cranes} clients={opts.clients} operators={opts.operators} defaults={{ start: toLocalInput(atLocal(now, 1, 7)), end: toLocalInput(atLocal(now, 2, 18)) }} />
-          </Modal>
+          opts.cranes.length > 0 && (
+            <Modal label="Nueva renta" title="Nueva renta" subtitle="Rhino agenda automáticamente la revisión total del día anterior." icon={<Plus className="size-4" />}>
+              <RentalForm cranes={opts.cranes} clients={opts.clients} operators={opts.operators} defaults={{ start: toLocalInput(atLocal(now, 1, 7)), end: toLocalInput(atLocal(now, 2, 18)) }} />
+            </Modal>
+          )
         }
       />
       <div className="flex flex-wrap items-center justify-between gap-3">

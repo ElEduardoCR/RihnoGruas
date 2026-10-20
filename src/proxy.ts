@@ -3,6 +3,8 @@ import { createServerClient } from "@supabase/ssr";
 
 // Rutas que no requieren sesión: wizard por token, webhook, crons, login y archivos (validan aparte).
 const PUBLIC = [/^\/login/, /^\/c\//, /^\/api\/whatsapp/, /^\/api\/cron/, /^\/api\/files/];
+// Requieren sesión pero no perfil de personal
+const ONBOARDING = [/^\/bienvenida/, /^\/cuenta/];
 
 export async function proxy(request: NextRequest) {
   const url = process.env.NEXT_PUBLIC_SUPABASE_URL;
@@ -28,6 +30,16 @@ export async function proxy(request: NextRequest) {
     login.pathname = "/login";
     login.searchParams.set("next", request.nextUrl.pathname);
     return NextResponse.redirect(login);
+  }
+  // Con sesión pero sin perfil de personal activo → primer acceso / sin acceso
+  if (!ONBOARDING.some((r) => r.test(request.nextUrl.pathname))) {
+    const { data: staff } = await supabase.rpc("is_staff");
+    if (staff !== true) {
+      const welcome = request.nextUrl.clone();
+      welcome.pathname = "/bienvenida";
+      welcome.search = "";
+      return NextResponse.redirect(welcome);
+    }
   }
   return response;
 }

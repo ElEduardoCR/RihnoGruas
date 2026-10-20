@@ -4,9 +4,11 @@
 -- armables en sitio, administrada por un agente IA vía WhatsApp.
 -- =====================================================================
 
-create extension if not exists pgcrypto;
-create extension if not exists btree_gist;
-create extension if not exists vector;
+-- En Supabase las extensiones viven en el esquema "extensions"
+create schema if not exists extensions;
+create extension if not exists pgcrypto with schema extensions;
+create extension if not exists btree_gist with schema extensions;
+create extension if not exists vector with schema extensions;
 
 -- ---------------------------------------------------------------------
 -- Personal (usuarios web, operadores y contactos de WhatsApp)
@@ -443,7 +445,9 @@ create index on knowledge_docs using hnsw (embedding vector_cosine_ops);
 
 create or replace function match_knowledge(query_embedding vector(1536), match_count int default 4)
 returns table (id uuid, title text, source text, content text, similarity float)
-language sql stable as $$
+language sql stable
+set search_path = public, extensions
+as $$
   select k.id, k.title, k.source, k.content, 1 - (k.embedding <=> query_embedding) as similarity
   from knowledge_docs k
   where k.embedding is not null

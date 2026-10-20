@@ -1,6 +1,6 @@
 "use client";
 
-import { useActionState, useEffect, useState } from "react";
+import { useActionState, useEffect, useRef, useState, useTransition } from "react";
 import { useCloseModal, FormMessage } from "./modal";
 import { Field, buttonClass, inputClass, selectClass } from "./ui";
 import { compressImage } from "@/lib/client-image";
@@ -19,7 +19,28 @@ import {
 
 type Opt = { id: string; label: string };
 
-function Submit({ pending, children }: { pending: boolean; children: React.ReactNode }) {
+/**
+ * Envía el formulario a una server action SIN el reinicio automático de React 19:
+ * si el servidor rechaza los datos (p. ej. "grúa no disponible"), lo capturado
+ * se conserva para corregirlo. En altas se limpia sólo cuando sale bien.
+ */
+export function useFormAction(fn: (prev: FormState, fd: FormData) => Promise<FormState>, opts: { resetOnSuccess?: boolean } = {}) {
+  const [state, dispatch, pending] = useActionState(fn, null);
+  const [, start] = useTransition();
+  const ref = useRef<HTMLFormElement>(null);
+  const { resetOnSuccess = false } = opts;
+  useEffect(() => {
+    if (state?.ok && resetOnSuccess) ref.current?.reset();
+  }, [state, resetOnSuccess]);
+  const onSubmit = (e: React.FormEvent<HTMLFormElement>) => {
+    e.preventDefault();
+    const fd = new FormData(e.currentTarget);
+    start(() => dispatch(fd));
+  };
+  return { state, pending, form: { ref, onSubmit } };
+}
+
+export function Submit({ pending, children }: { pending: boolean; children: React.ReactNode }) {
   return (
     <button type="submit" disabled={pending} className={buttonClass("primary", "lg") + " w-full"}>
       {pending ? "Procesando…" : children}
@@ -28,10 +49,11 @@ function Submit({ pending, children }: { pending: boolean; children: React.React
 }
 
 /** Cierra el modal tras éxito (con una pausa para leer el mensaje). */
-function useAutoClose(state: FormState, ms = 2600) {
+export function useAutoClose(state: FormState, ms = 2600) {
   const close = useCloseModal();
   useEffect(() => {
-    if (state?.ok) {
+    // Nunca cerrar solo si el mensaje trae algo que hay que copiar (contraseña temporal)
+    if (state?.ok && !/contraseña temporal/i.test([state.message, ...(state.details ?? [])].join(" "))) {
       const t = setTimeout(close, ms);
       return () => clearTimeout(t);
     }
@@ -39,11 +61,11 @@ function useAutoClose(state: FormState, ms = 2600) {
 }
 
 export function RentalForm({ cranes, clients, operators, defaults, craneId }: { cranes: Opt[]; clients: Opt[]; operators: Opt[]; defaults: { start: string; end: string }; craneId?: string }) {
-  const [state, action, pending] = useActionState(createRentalAction, null);
+  const { state, pending, form } = useFormAction(createRentalAction, { resetOnSuccess: true });
   const [newClient, setNewClient] = useState(false);
   useAutoClose(state, 5000);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <Field label="Grúa">
         <select name="crane_id" required defaultValue={craneId} className={selectClass}>
           {cranes.map((c) => (
@@ -97,10 +119,10 @@ export function RentalForm({ cranes, clients, operators, defaults, craneId }: { 
 }
 
 export function DowntimeForm({ craneId }: { craneId: string }) {
-  const [state, action, pending] = useActionState(reportDowntimeAction, null);
+  const { state, pending, form } = useFormAction(reportDowntimeAction, { resetOnSuccess: true });
   useAutoClose(state);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <input type="hidden" name="crane_id" value={craneId} />
       <Field label="Causa">
         <select name="category" className={selectClass}>
@@ -122,10 +144,10 @@ export function DowntimeForm({ craneId }: { craneId: string }) {
 }
 
 export function InspectionForm({ craneId, staff, defaultWhen }: { craneId: string; staff: Opt[]; defaultWhen: string }) {
-  const [state, action, pending] = useActionState(scheduleInspectionAction, null);
+  const { state, pending, form } = useFormAction(scheduleInspectionAction, { resetOnSuccess: true });
   useAutoClose(state);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <input type="hidden" name="crane_id" value={craneId} />
       <Field label="Tipo">
         <select name="kind" className={selectClass}>
@@ -152,10 +174,10 @@ export function InspectionForm({ craneId, staff, defaultWhen }: { craneId: strin
 }
 
 export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: string; mechanics: Opt[]; defaults: { start: string; end: string } }) {
-  const [state, action, pending] = useActionState(scheduleMaintenanceAction, null);
+  const { state, pending, form } = useFormAction(scheduleMaintenanceAction, { resetOnSuccess: true });
   useAutoClose(state);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <input type="hidden" name="crane_id" value={craneId} />
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tipo">
@@ -193,10 +215,10 @@ export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: str
 }
 
 export function CompleteMaintenanceForm({ id }: { id: string }) {
-  const [state, action, pending] = useActionState(completeMaintenanceAction, null);
+  const { state, pending, form } = useFormAction(completeMaintenanceAction, { resetOnSuccess: true });
   useAutoClose(state, 1200);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <input type="hidden" name="id" value={id} />
       <Field label="Costo total (MXN)">
         <input name="cost" inputMode="decimal" required className={inputClass} placeholder="0" />
@@ -208,14 +230,14 @@ export function CompleteMaintenanceForm({ id }: { id: string }) {
 }
 
 export function IssueForm({ items, cranes, defaultCrane }: { items: (Opt & { unit: string; serialized: boolean; requiresReturn: boolean; compat: string[]; scope: string })[]; cranes: Opt[]; defaultCrane?: string }) {
-  const [state, action, pending] = useActionState(requestIssueAction, null);
+  const { state, pending, form } = useFormAction(requestIssueAction, { resetOnSuccess: true });
   const [itemId, setItemId] = useState(items[0]?.id ?? "");
   const [craneId, setCraneId] = useState(defaultCrane ?? cranes[0]?.id ?? "");
   const item = items.find((i) => i.id === itemId);
   const incompatible = item && item.scope === "especifico" && !item.compat.includes(craneId);
   useAutoClose(state, 4000);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <Field label="Artículo">
         <select name="item_id" value={itemId} onChange={(e) => setItemId(e.target.value)} className={selectClass}>
           {items.map((i) => (
@@ -268,10 +290,10 @@ export function IssueForm({ items, cranes, defaultCrane }: { items: (Opt & { uni
 }
 
 export function PurchaseForm({ items, cranes, today }: { items: Opt[]; cranes: Opt[]; today: string }) {
-  const [state, action, pending] = useActionState(registerPurchaseAction, null);
+  const { state, pending, form } = useFormAction(registerPurchaseAction, { resetOnSuccess: true });
   useAutoClose(state);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <div className="grid grid-cols-2 gap-3">
         <Field label="Proveedor">
           <input name="supplier" required className={inputClass} />
@@ -332,9 +354,9 @@ export function PurchaseForm({ items, cranes, today }: { items: Opt[]; cranes: O
 }
 
 export function CountForm({ items }: { items: (Opt & { unit: string })[] }) {
-  const [state, action, pending] = useActionState(registerCountAction, null);
+  const { state, pending, form } = useFormAction(registerCountAction, { resetOnSuccess: true });
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <Field label="Artículo contado">
         <select name="item_id" className={selectClass}>
           {items.map((i) => (
@@ -368,10 +390,10 @@ const DOC_TYPES: [string, string][] = [
 
 /** Alta (sin `doc`) o renovación (con `doc`) de un documento del expediente. */
 export function DocumentForm({ craneId, doc }: { craneId: string; doc?: { id: string; label: string; number: string | null; issuer: string | null; coverage: string | null } }) {
-  const [state, action, pending] = useActionState(saveDocumentAction, null);
+  const { state, pending, form } = useFormAction(saveDocumentAction, { resetOnSuccess: true });
   useAutoClose(state, 1500);
   return (
-    <form action={action} className="space-y-4">
+    <form {...form} className="space-y-4">
       <input type="hidden" name="crane_id" value={craneId} />
       {doc ? (
         <>

@@ -1,7 +1,7 @@
 import { Suspense } from "react";
 import Link from "next/link";
 import { connection } from "next/server";
-import { ArrowDownLeft, ArrowUpRight, Camera, Check, ClipboardList, Lock, PackageMinus, PackagePlus, Repeat, ScanBarcode, ShieldAlert, X } from "lucide-react";
+import { ArrowDownLeft, ArrowUpRight, Camera, Check, ClipboardList, Lock, PackageMinus, PackagePlus, Plus, Repeat, ScanBarcode, ShieldAlert, X } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { inventoryWatch, type EnrichedMovement } from "@/lib/services/inventory";
 import { latestPurchases } from "@/lib/services/expenses";
@@ -12,6 +12,9 @@ import { env } from "@/lib/env";
 import { Badge, Card, CardHeader, Empty, PageHeader, PageSkeleton, Stat, Tabs, buttonClass, cx } from "@/components/ui";
 import { Modal } from "@/components/modal";
 import { CountForm, IssueForm, PurchaseForm } from "@/components/forms";
+import { ItemForm } from "@/components/catalog-forms";
+import { currentStaff } from "@/lib/auth";
+import { MANAGER_ROLES } from "@/lib/services/catalogs";
 import { resolveMovementAction } from "@/app/actions";
 
 export const metadata = { title: "Inventario" };
@@ -32,12 +35,14 @@ async function Inventory({ searchParams }: { searchParams: SP }) {
   const tab = sp.tab ?? "general";
   const db = await getDb();
   const now = new Date();
-  const [w, opts, cranes, purchases] = await Promise.all([
+  const [w, opts, cranes, purchases, me] = await Promise.all([
     inventoryWatch(db, now),
     getFormOptions(db),
     db.select("cranes", { eq: { active: true }, order: { column: "code" } }),
     latestPurchases(db, 30),
+    currentStaff(db),
   ]);
+  const canEdit = Boolean(me && MANAGER_ROLES.includes(me.role));
   const craneCode = new Map(cranes.map((c) => [c.id, c.code]));
   const totalValue = w.stock.reduce((s, i) => s + Math.max(0, i.value), 0);
   const selectedCrane = cranes.find((c) => c.id === sp.grua) ?? cranes[0];
@@ -49,6 +54,11 @@ async function Inventory({ searchParams }: { searchParams: SP }) {
         subtitle="Insumos generales y refacciones específicas por grúa. Cada salida queda ligada a una grúa, una persona y una evidencia."
         actions={
           <>
+            {canEdit && (
+              <Modal label="Nuevo artículo" title="Nuevo artículo" variant="outline" icon={<Plus className="size-4" />} wide>
+                <ItemForm cranes={cranes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}` }))} />
+              </Modal>
+            )}
             <Modal label="Conteo cíclico" title="Conteo cíclico" subtitle="Compara lo físico contra el sistema." variant="outline" icon={<ClipboardList className="size-4" />}>
               <CountForm items={opts.items} />
             </Modal>

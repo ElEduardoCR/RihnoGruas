@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, CalendarDays, ClipboardCheck, LayoutGrid, LogOut, MessageCircle } from "lucide-react";
+import { Boxes, CalendarDays, ClipboardCheck, FolderCog, LayoutGrid, LogOut, MessageCircle, UserRound } from "lucide-react";
 import { signOutAction } from "@/app/actions";
 import { CraneIcon, RhinoMark } from "./brand";
 import { cx } from "./ui";
@@ -14,6 +14,7 @@ const NAV = [
   { href: "/inventario", label: "Inventario", icon: Boxes },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/agente", label: "Agente Rhino", icon: MessageCircle },
+  { href: "/catalogos", label: "Catálogos", icon: FolderCog },
 ];
 
 function isActive(pathname: string, href: string) {
@@ -71,11 +72,16 @@ export function SidebarView({ mode, pathname }: { mode: Mode; pathname: string }
             <span className="font-semibold text-rhino-400">Modo demo.</span> Datos en memoria. Configura Supabase para producción.
           </div>
         ) : (
-          <form action={signOutAction}>
-            <button className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-[13px] text-white/50 hover:bg-white/5 hover:text-white">
-              <LogOut className="size-4" /> Cerrar sesión
-            </button>
-          </form>
+          <div>
+            <Link href="/cuenta" className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-[13px] text-white/50 hover:bg-white/5 hover:text-white">
+              <UserRound className="size-4" /> Mi cuenta
+            </Link>
+            <form action={signOutAction}>
+              <button className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-[13px] text-white/50 hover:bg-white/5 hover:text-white">
+                <LogOut className="size-4" /> Cerrar sesión
+              </button>
+            </form>
+          </div>
         )}
       </div>
     </aside>
@@ -93,7 +99,7 @@ export function MobileNavView({ pathname }: { pathname: string }) {
         <RhinoMark className="size-8" />
         <span className="font-display text-[17px] font-semibold">Rhino</span>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-6 border-t border-black/5 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
+      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-black/5 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
         {NAV.map(({ href, label, icon: Icon }) => {
           const active = isActive(pathname, href);
           return (

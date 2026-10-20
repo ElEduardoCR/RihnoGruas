@@ -2,7 +2,7 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
-import { CalendarPlus, ChevronLeft, ClipboardCheck, FileText, OctagonAlert, Phone, ShieldCheck, Wrench } from "lucide-react";
+import { CalendarPlus, ChevronLeft, ClipboardCheck, FileText, OctagonAlert, Pencil, Phone, ShieldCheck, UserPlus, Wrench } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { getCraneDossier } from "@/lib/services/fleet";
 import { getFormOptions } from "@/lib/services/options";
@@ -14,6 +14,10 @@ import { CraneArt } from "@/components/brand";
 import { Modal } from "@/components/modal";
 import { CompleteMaintenanceForm, DocumentForm, DowntimeForm, InspectionForm, MaintenanceForm, RentalForm } from "@/components/forms";
 import { releaseCraneAction } from "@/app/actions";
+import { revokeOperatorAction } from "@/app/catalog-actions";
+import { ApproveOperatorForm, CraneForm, RevokeButton } from "@/components/catalog-forms";
+import { currentStaff } from "@/lib/auth";
+import { MANAGER_ROLES } from "@/lib/services/catalogs";
 
 export const metadata = { title: "Expediente de grúa" };
 
@@ -43,7 +47,9 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
   const now = new Date();
   const d = await getCraneDossier(db, id, now);
   if (!d) notFound();
-  const opts = await getFormOptions(db);
+  const [opts, me, allStaff] = await Promise.all([getFormOptions(db), currentStaff(db), db.select("staff", { eq: { role: "operador", active: true }, order: { column: "full_name" } })]);
+  const canEdit = Boolean(me && MANAGER_ROLES.includes(me.role));
+  const approvable = allStaff.filter((s) => !d.operators.some((o) => o.staff_id === s.id)).map((s) => ({ id: s.id, label: s.full_name }));
   const { crane: c } = d;
   const openDowntime = d.downtimes.find((x) => !x.ended_at);
   const t = now.getTime();
@@ -99,6 +105,11 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
               <Modal label="Programar revisión" title={`Revisión de ${c.code}`} subtitle="Se personaliza con el historial de la grúa y se envía el enlace por WhatsApp." icon={<ClipboardCheck className="size-4" />} variant="outline">
                 <InspectionForm craneId={c.id} staff={opts.staff} defaultWhen={toLocalInput(atLocal(now, 1, 9))} />
               </Modal>
+              {canEdit && (
+                <Modal label="Editar datos" title={`Editar ${c.code}`} icon={<Pencil className="size-4" />} variant="ghost" wide>
+                  <CraneForm crane={c} />
+                </Modal>
+              )}
               <Modal label="Mantenimiento" title={`Mantenimiento de ${c.code}`} icon={<Wrench className="size-4" />} variant="outline">
                 <MaintenanceForm craneId={c.id} mechanics={opts.mechanics} defaults={{ start: toLocalInput(atLocal(now, 1, 8)), end: toLocalInput(atLocal(now, 1, 18)) }} />
               </Modal>
@@ -234,7 +245,17 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
         </Card>
 
         <Card id="operadores" className="scroll-mt-20">
-          <CardHeader title="Operadores aprobados" subtitle="Únicos autorizados para manipular esta grúa" />
+          <CardHeader
+            title="Operadores aprobados"
+            subtitle="Únicos autorizados para manipular esta grúa"
+            action={
+              canEdit && (
+                <Modal label="Aprobar" title={`Aprobar operador · ${c.code}`} size="sm" variant="outline" icon={<UserPlus className="size-3.5" />}>
+                  <ApproveOperatorForm craneId={c.id} operators={approvable} />
+                </Modal>
+              )
+            }
+          />
           <ul className="space-y-2 p-4 sm:p-5">
             {d.operators.map((o) => {
               const lic = o.staff.license_expires_on ? daysUntil(o.staff.license_expires_on, now) : null;
@@ -248,7 +269,10 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
                         {o.staff.license_type} · {o.staff.license_number}
                       </div>
                     </div>
-                    {lic != null && (lic < 0 ? <Badge tone="red">Licencia vencida</Badge> : lic <= 30 ? <Badge tone="amber">Licencia {lic} d</Badge> : <Badge tone="green">Licencia vigente</Badge>)}
+                    <div className="flex items-center gap-1">
+                      {lic != null && (lic < 0 ? <Badge tone="red">Licencia vencida</Badge> : lic <= 30 ? <Badge tone="amber">Licencia {lic} d</Badge> : <Badge tone="green">Licencia vigente</Badge>)}
+                      {canEdit && <RevokeButton action={revokeOperatorAction.bind(null, o.id)} />}
+                    </div>
                   </div>
                   <div className="mt-2 flex flex-wrap gap-x-4 gap-y-1 text-[12px] text-muted">
                     <span>Aprobado {fmt.short(o.approved_on)}</span>

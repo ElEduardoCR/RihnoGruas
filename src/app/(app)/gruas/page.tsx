@@ -8,7 +8,12 @@ import { CRANE_TYPE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { CraneStatus, CraneType } from "@/lib/types";
 import { fmt, num } from "@/lib/time";
 import { Badge, Card, DocHealthBadge, PageHeader, PageSkeleton, Progress, StatusPill, cx } from "@/components/ui";
-import { CraneArt } from "@/components/brand";
+import { CraneArt, CraneIcon } from "@/components/brand";
+import { Modal } from "@/components/modal";
+import { CraneForm } from "@/components/catalog-forms";
+import { Plus } from "lucide-react";
+import { currentStaff } from "@/lib/auth";
+import { MANAGER_ROLES } from "@/lib/services/catalogs";
 
 export const metadata = { title: "Grúas" };
 
@@ -27,7 +32,8 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
   const sp = await searchParams;
   const db = await getDb();
   const now = new Date();
-  const { cranes } = await getFleet(db, now);
+  const [{ cranes }, me] = await Promise.all([getFleet(db, now), currentStaff(db)]);
+  const canEdit = Boolean(me && MANAGER_ROLES.includes(me.role));
   const tipo = sp.tipo as CraneType | undefined;
   const estado = sp.estado as CraneStatus | undefined;
   const list = cranes.filter((c) => (!tipo || c.type === tipo) && (!estado || c.status === estado));
@@ -44,7 +50,24 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
 
   return (
     <>
-      <PageHeader title="Grúas" subtitle={`${cranes.length} unidades · grúas móviles, Titanes y armables en sitio. Toca una para ver su expediente completo.`} />
+      <PageHeader
+        title="Grúas"
+        subtitle={`${cranes.length} unidades · grúas móviles, Titanes y armables en sitio. Toca una para ver su expediente completo.`}
+        actions={
+          canEdit && (
+            <Modal label="Nueva grúa" title="Nueva grúa" icon={<Plus className="size-4" />} wide>
+              <CraneForm />
+            </Modal>
+          )
+        }
+      />
+      {cranes.length === 0 && (
+        <Card className="p-10 text-center" as="div">
+          <CraneIcon className="mx-auto size-10 text-faint" />
+          <div className="mt-3 text-[17px] font-semibold">Aún no hay grúas</div>
+          <p className="mx-auto mt-1 max-w-md text-[14px] text-muted">Da de alta la primera con “Nueva grúa”. Después carga sus documentos y aprueba a sus operadores desde su expediente.</p>
+        </Card>
+      )}
       <div className="mb-6 flex flex-wrap gap-2">
         <Link href={href({ tipo: null })} className={chip(!tipo)}>Todas</Link>
         {(Object.keys(CRANE_TYPE_LABELS) as CraneType[]).map((t) => (
@@ -116,7 +139,7 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
           </Link>
         ))}
       </div>
-      {list.length === 0 && (
+      {list.length === 0 && cranes.length > 0 && (
         <Card className="p-10 text-center text-muted">
           Ninguna grúa con esos filtros. <Link href="/gruas" className="font-medium text-rhino-600">Quitar filtros</Link>
         </Card>

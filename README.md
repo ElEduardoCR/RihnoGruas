@@ -15,6 +15,7 @@ Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión gr�
 | **Grúas** | Catálogo filtrable y **expediente detallado**: ficha técnica, documentos con vigencia (seguro, tarjeta de circulación, verificación, permiso SCT, certificación…), operadores aprobados con estado de licencia, agenda, revisiones, puntos propios de revisión, mantenimiento, consumo de almacén y gastos. |
 | **Inventario** | Insumos **generales** (aceites, consumibles) y refacciones **específicas por grúa** (compatibilidad). Libro de movimientos inmutable, conteos cíclicos, compras y **controles antirrobo** (ver abajo). |
 | **Checklists** | Revisiones tipo **wizard** (un punto a la vez, foto obligatoria) que el operador abre desde un enlace de WhatsApp. **Personalizadas por grúa** y con **calidad de llenado** medida. |
+| **Catálogos** | Alta y edición de grúas, clientes, personal (puesto, WhatsApp, avisos, licencia, grúas aprobadas, acceso web) y artículos de almacén (general o específico por grúa, controles antirrobo, existencia inicial). Guía de “Primeros pasos” mientras falten datos. |
 | **Agente Rhino** | Simulador del chat de WhatsApp, bitácora de decisiones (cada herramienta que usó), alertas enviadas, escaneo proactivo manual y **evaluación de precisión** con 24 casos. |
 
 ### Decisiones que Rhino toma solo
@@ -105,13 +106,9 @@ Abre http://localhost:3000. Sin variables de Supabase la app arranca en **modo d
 4. Carga datos:
    - Para probar con datos de ejemplo: `npm run db:seed`
    - Para arrancar en limpio sólo con plantillas de checklist y políticas: `npm run db:seed -- --catalogos`
-5. Crea los usuarios de la web en **Authentication → Users** y vincúlalos con su registro en `staff`:
-   ```sql
-   update staff set auth_user_id = (select id from auth.users where email = 'direccion@empresa.mx')
-   where email = 'direccion@empresa.mx';
-   ```
-   Las políticas RLS sólo dejan ver datos a personal activo vinculado. El agente, el webhook y los crons usan la `service_role` del lado del servidor.
-6. Captura en `staff.phone` el WhatsApp de cada persona en formato `521XXXXXXXXXX`, sus `alert_topics` (`documentos`, `inventario`, `agenda`, `gastos`, `checklists`, `resumen`, `flota`) y quién puede autorizar (`can_authorize`).
+5. **Primer acceso:** crea tu usuario en Supabase → **Authentication → Users → Add user** (correo y contraseña, “Auto confirm user”) y entra a la app. Como la base no tiene personal, la app te pide nombre y WhatsApp y te deja como **Dirección**.
+6. En **Catálogos** da de alta grúas, personal, clientes y artículos. Al registrar a alguien con correo puedes darle **acceso web**: la app crea su usuario con una contraseña temporal (se muestra una sola vez) que cambia en **Mi cuenta**. Si su usuario ya existía en Supabase con ese correo, se vincula solo al entrar.
+7. Migraciones futuras: `npm run db:status` y `npm run db:push` (toman el ref y la contraseña de `.env.local`).
 
 ### 2. WhatsApp Cloud API (Meta)
 1. En developers.facebook.com crea una app de tipo **Business** y agrega el producto **WhatsApp**.

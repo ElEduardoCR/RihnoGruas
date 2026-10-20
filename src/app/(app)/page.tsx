@@ -82,12 +82,29 @@ async function Dashboard() {
         actions={
           <>
             <LinkButton href="/agente" variant="outline">Hablar con Rhino</LinkButton>
-            <Modal label="Nueva renta" title="Nueva renta" subtitle="Rhino valida disponibilidad, documentos y operador, y agenda la revisión total." icon={<Plus className="size-4" />}>
-              <RentalForm cranes={opts.cranes} clients={opts.clients} operators={opts.operators} defaults={{ start: toLocalInput(atLocal(now, 1, 7)), end: toLocalInput(atLocal(now, 2, 18)) }} />
-            </Modal>
+            {opts.cranes.length > 0 && (
+              <Modal label="Nueva renta" title="Nueva renta" subtitle="Rhino valida disponibilidad, documentos y operador, y agenda la revisión total." icon={<Plus className="size-4" />}>
+                <RentalForm cranes={opts.cranes} clients={opts.clients} operators={opts.operators} defaults={{ start: toLocalInput(atLocal(now, 1, 7)), end: toLocalInput(atLocal(now, 2, 18)) }} />
+              </Modal>
+            )}
           </>
         }
       />
+
+      {cranes.length === 0 && (
+        <Card className="mb-6 overflow-hidden" as="div">
+          <div className="flex flex-col gap-5 p-6 sm:flex-row sm:items-center sm:p-8">
+            <RhinoMark className="size-12 shrink-0" />
+            <div className="min-w-0 flex-1">
+              <h2 className="text-[20px] font-semibold">Empecemos: registra tu flotilla</h2>
+              <p className="mt-1 text-[14px] text-muted">
+                Rhino necesita conocer tus grúas, operadores, clientes y almacén para agendar revisiones, cuidar documentos y avisarte por WhatsApp.
+              </p>
+            </div>
+            <LinkButton href="/catalogos" variant="primary">Ir a Catálogos</LinkButton>
+          </div>
+        </Card>
+      )}
 
       {/* Rhino informa */}
       <Card className="mb-6 overflow-hidden bg-night text-white" as="div">

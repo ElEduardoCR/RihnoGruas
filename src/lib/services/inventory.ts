@@ -9,12 +9,14 @@ export interface StockRow extends InventoryItem {
   value: number;
   low: boolean;
   compatCraneIds: string[];
+  /** consumo esperado por servicio configurado en la compatibilidad */
+  expectedPerService: number | null;
   pendingOut: number;
 }
 
-export async function getStock(db: Db): Promise<StockRow[]> {
+export async function getStock(db: Db, opts: { includeInactive?: boolean } = {}): Promise<StockRow[]> {
   const [items, movements, compat] = await Promise.all([
-    db.select("inventory_items", { eq: { active: true }, order: { column: "name" } }),
+    db.select("inventory_items", { ...(opts.includeInactive ? {} : { eq: { active: true } }), order: { column: "name" } }),
     db.select("inventory_movements", { neq: { status: "rechazado" } }),
     db.select("inventory_compat"),
   ]);
@@ -28,6 +30,7 @@ export async function getStock(db: Db): Promise<StockRow[]> {
       value: stock * it.unit_cost,
       low: stock <= it.min_stock,
       compatCraneIds: compat.filter((c) => c.item_id === it.id).map((c) => c.crane_id),
+      expectedPerService: compat.find((c) => c.item_id === it.id && c.expected_qty_per_service != null)?.expected_qty_per_service ?? null,
       pendingOut,
     };
   });

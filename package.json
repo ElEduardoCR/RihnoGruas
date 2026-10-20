@@ -8,7 +8,10 @@
     "start": "next start",
     "lint": "eslint",
     "typecheck": "tsc --noEmit",
-    "db:seed": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/seed.ts"
+    "db:seed": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/seed.ts",
+    "db:link": "node scripts/supabase.mjs link",
+    "db:push": "node scripts/supabase.mjs push",
+    "db:status": "node scripts/supabase.mjs status"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",
