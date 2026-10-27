@@ -11,7 +11,7 @@ export async function getFormOptions(db: Db) {
     db.select("inventory_compat"),
   ]);
   return {
-    cranes: cranes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name} (${c.capacity_tons} t)` })),
+    cranes: cranes.map((c) => ({ id: c.id, label: `${c.code} · ${c.name}${c.capacity_tons == null ? "" : ` (${c.capacity_tons} t)`}` })),
     clients: clients.map((c) => ({ id: c.id, label: c.name })),
     operators: staff.filter((s) => s.role === "operador").map((s) => ({ id: s.id, label: s.full_name })),
     mechanics: staff.filter((s) => s.role === "mecanico").map((s) => ({ id: s.id, label: s.full_name })),

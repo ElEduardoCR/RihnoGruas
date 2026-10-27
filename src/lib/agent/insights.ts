@@ -4,7 +4,7 @@ import { docStatus } from "@/lib/domain/fleet";
 import { DOC_LABELS, flagText, qtyUnit } from "@/lib/labels";
 import { getFleet } from "@/lib/services/fleet";
 import { inventoryWatch } from "@/lib/services/inventory";
-import { findAvailable } from "@/lib/services/rentals";
+import { findAvailable, identificationIssue } from "@/lib/services/rentals";
 import { monthlyExpenses } from "@/lib/services/expenses";
 import { addDays, daysUntil, fmt, money, startOfDay, zonedParts } from "@/lib/time";
 
@@ -109,14 +109,14 @@ export async function collectInsights(db: Db, now: Date): Promise<Insight[]> {
   for (const c of cranes.filter((c) => c.status === "detenida")) {
     const affected = rentals.filter((r) => r.crane_id === c.id && Date.parse(r.end_at) > now.getTime() && Date.parse(r.start_at) < addDays(now, 14).getTime());
     for (const r of affected) {
-      const options = await findAvailable(db, { from: new Date(r.start_at), to: new Date(r.end_at), type: c.type, minCapacity: c.capacity_tons * 0.9 }, now);
+      const options = c.capacity_tons == null ? [] : await findAvailable(db, { from: new Date(r.start_at), to: new Date(r.end_at), type: c.type, minCapacity: c.capacity_tons }, now);
       const sub = options.find((o) => o.available && o.crane.id !== c.id);
       out.push({
         key: `renta:riesgo:${r.id}`,
         topic: "agenda",
         severity: "critica",
         title: `Renta en riesgo: ${c.code} está detenida`,
-        body: `${clientName(r.client_id)} · ${fmt.dateTime(r.start_at)}. ${sub ? `Sustituta disponible: ${sub.crane.code} ${sub.crane.name} (${sub.crane.capacity_tons} t).` : "No hay sustituta disponible del mismo tipo y capacidad."}`,
+        body: `${clientName(r.client_id)} · ${fmt.dateTime(r.start_at)}. ${sub ? `Sustituta disponible: ${sub.crane.code} ${sub.crane.name} (${sub.crane.capacity_tons} t).` : c.capacity_tons == null ? "Capacidad pendiente de confirmar; no se propone sustituta." : "No hay sustituta disponible del mismo tipo y capacidad."}`,
         crane_id: c.id,
         href: `/gruas/${c.id}`,
       });
@@ -139,12 +139,12 @@ export async function collectInsights(db: Db, now: Date): Promise<Insight[]> {
   for (const c of cranes.filter((c) => c.status === "detenida" && c.current)) {
     const days = -daysUntil(c.current!.start, now);
     if (days >= 3)
-      out.push({ key: `flota:detenida-larga:${c.current!.id}:${Math.floor(days / 3)}`, topic: "flota", severity: "aviso", title: `${c.code} lleva ${days} días detenida`, body: `${c.current!.title}. Cada día detenida deja de facturar ~${money(c.daily_rate ?? 0)}.`, crane_id: c.id, href: `/gruas/${c.id}` });
+      out.push({ key: `flota:detenida-larga:${c.current!.id}:${Math.floor(days / 3)}`, topic: "flota", severity: "aviso", title: `${c.code} lleva ${days} días detenida`, body: `${c.current!.title}.${c.daily_rate == null ? " Tarifa pendiente de registrar." : ` Cada día detenida deja de facturar ~${money(c.daily_rate)}.`}`, crane_id: c.id, href: `/gruas/${c.id}` });
   }
 
   // 7) Servicio preventivo por horómetro
   for (const c of cranes) {
-    if (c.service.pct < 0.9) continue;
+    if (!c.service.known || c.last_service_hours == null || c.service.pct < 0.9) continue;
     out.push({
       key: `servicio:${c.id}:${Math.floor(c.last_service_hours)}`,
       topic: "flota",
@@ -179,10 +179,10 @@ export async function collectInsights(db: Db, now: Date): Promise<Insight[]> {
 
   // 9) Grúas ociosas: oportunidad comercial
   const in7 = addDays(startOfDay(now), 7).getTime();
-  for (const c of cranes.filter((c) => c.status === "disponible")) {
+  for (const c of cranes.filter((c) => c.status === "disponible" && !identificationIssue(c) && ["grua_movil", "camion_grua", "grua_armable", "telehandler"].includes(c.type))) {
     const busy = rentals.some((r) => r.crane_id === c.id && Date.parse(r.start_at) < in7);
     if (!busy)
-      out.push({ key: `flota:ociosa:${c.id}:${dayKeyOf(startOfDay(now))}`, topic: "agenda", severity: "info", title: `${c.code} sin rentas los próximos 7 días`, body: `${c.name} (${c.capacity_tons} t) está libre. Tarifa base ${money(c.daily_rate ?? 0)}/día.`, crane_id: c.id, href: `/gruas/${c.id}` });
+      out.push({ key: `flota:ociosa:${c.id}:${dayKeyOf(startOfDay(now))}`, topic: "agenda", severity: "info", title: `${c.code} sin rentas los próximos 7 días`, body: `${c.name} ${c.capacity_tons == null ? "(capacidad pendiente)" : `(${c.capacity_tons} t)`} está libre. ${c.daily_rate == null ? "Tarifa pendiente de registrar." : `Tarifa base ${money(c.daily_rate)}/día.`}`, crane_id: c.id, href: `/gruas/${c.id}` });
   }
 
   // 10) Gasto del mes contra el promedio

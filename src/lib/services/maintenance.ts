@@ -3,6 +3,7 @@ import type { DowntimeCategory, MaintenanceOrder } from "@/lib/types";
 import { DOWNTIME_LABELS } from "@/lib/labels";
 import { addDays, fmt, overlaps } from "@/lib/time";
 import { raiseAlert } from "./notify";
+import { assertMaintenanceEvidence, createMaintenanceSnapshot } from "@/lib/domain/maintenance-checklists";
 
 export async function reportDowntime(
   db: Db,
@@ -65,6 +66,7 @@ export async function scheduleMaintenance(
     end: Date;
     mechanicId?: string | null;
     createdBy: "web" | "agente";
+    planId?: string | null;
   },
 ) {
   if (!(input.end > input.start)) throw new Error("La fecha de fin debe ser posterior al inicio");
@@ -72,10 +74,19 @@ export async function scheduleMaintenance(
   const clash = rentals.find((r) => overlaps(input.start, input.end, new Date(r.start_at), new Date(r.end_at)));
   if (clash) throw new Error(`Choca con una renta del ${fmt.dateTime(clash.start_at)} al ${fmt.dateTime(clash.end_at)}`);
   const crane = await db.get("cranes", input.craneId);
-  return db.insert("maintenance_orders", {
+  if (!crane?.active) throw new Error("Unidad activa no encontrada.");
+  if (!input.title.trim()) throw new Error("Indica el trabajo a realizar.");
+  if (input.mechanicId) {
+    const mechanic = await db.get("staff", input.mechanicId);
+    if (!mechanic?.active || !["mecanico", "direccion", "administracion"].includes(mechanic.role)) throw new Error("Selecciona un responsable de mantenimiento activo.");
+  }
+  const plan = input.planId ? crane.fleet_profile?.maintenance_plans.find((p) => p.id === input.planId) : null;
+  if (input.planId && !plan) throw new Error("El plan no pertenece a esta unidad.");
+  const order: Partial<MaintenanceOrder> = {
+    id: crypto.randomUUID(),
     crane_id: input.craneId,
     kind: input.kind,
-    title: input.title.trim(),
+    title: plan?.title ?? input.title.trim(),
     description: input.description ?? null,
     scheduled_start: input.start.toISOString(),
     scheduled_end: input.end.toISOString(),
@@ -85,16 +96,59 @@ export async function scheduleMaintenance(
     hour_meter_at: crane?.hour_meter ?? null,
     created_by: input.createdBy,
     completed_at: null,
-  });
+    plan_id: plan?.id ?? null,
+    checklist_version: plan?.checklist_version ?? null,
+  };
+  if (!plan) return db.insert("maintenance_orders", order);
+  const open = await db.select("maintenance_orders", { eq: { crane_id: crane.id, plan_id: plan.id }, in: { status: ["programado", "en_proceso"] } });
+  if (open.length) throw new Error("Ya hay una orden abierta para este plan. Abre su checklist desde el expediente.");
+  if (!db.createMaintenanceBundle) throw new Error("La base necesita la actualización de checklists de mantenimiento.");
+  return db.createMaintenanceBundle(createMaintenanceSnapshot(crane, plan, order));
 }
 
 export async function completeMaintenance(db: Db, id: string, cost: number, now: Date) {
   const mo = await db.get("maintenance_orders", id);
   if (!mo) throw new Error("Orden no encontrada");
+  if (mo.status === "cancelado") throw new Error("La orden está cancelada.");
+  if (mo.status === "completado") return mo;
+  if (!Number.isFinite(cost) || cost < 0) throw new Error("El costo debe ser un número no negativo.");
+  if (mo.plan_id) {
+    const attempts = await db.select("inspections", { eq: { maintenance_order_id: mo.id }, order: { column: "created_at", ascending: false } });
+    const inspection = attempts[0];
+    if (!inspection || inspection.status !== "completada" || inspection.result !== "aprobada" || (inspection.quality_score ?? 0) < 70) throw new Error("Completa y aprueba el checklist con sus fotos antes de cerrar la orden.");
+    const items = await db.select("inspection_items", { eq: { inspection_id: inspection.id } });
+    assertMaintenanceEvidence(items);
+    if (items.some((i) => i.passed !== true)) throw new Error("El checklist tiene trabajos pendientes o fallas.");
+  }
   const updated = await db.update("maintenance_orders", id, { status: "completado", cost, completed_at: now.toISOString() });
-  if (mo.kind === "preventivo") {
+  if (mo.kind === "preventivo" && !mo.plan_id) {
     const crane = await db.get("cranes", mo.crane_id);
-    if (crane) await db.update("cranes", crane.id, { last_service_hours: crane.hour_meter });
+    if (crane?.hour_meter != null) await db.update("cranes", crane.id, { last_service_hours: crane.hour_meter });
   }
   return updated;
+}
+
+/** A failed attempt stays in the history; repeat with an empty copy of its frozen steps. */
+export async function repeatMaintenanceChecklist(db: Db, id: string) {
+  const order = await db.get("maintenance_orders", id);
+  if (!order?.plan_id || !["programado", "en_proceso"].includes(order.status)) throw new Error("Esta orden no tiene un checklist que se pueda repetir.");
+  const attempts = await db.select("inspections", { eq: { maintenance_order_id: id }, order: { column: "created_at", ascending: false } });
+  const last = attempts[0];
+  if (!last || !["completada", "cancelada"].includes(last.status)) throw new Error("Termina el checklist pendiente antes de repetirlo.");
+  if (last.result === "aprobada" && (last.quality_score ?? 0) >= 70 && last.status === "completada") throw new Error("El checklist ya está aprobado; puedes cerrar la orden.");
+  const previousItems = await db.select("inspection_items", { eq: { inspection_id: last.id }, order: { column: "position" } });
+  if (!previousItems.length || !db.createMaintenanceBundle) throw new Error("No hay pasos disponibles para repetir.");
+  const inspectionId = crypto.randomUUID();
+  const created = new Date().toISOString();
+  await db.createMaintenanceBundle({ repeat: true, order, inspection: {
+    ...last, id: inspectionId, title: `${order.title} · intento ${attempts.length + 1}`,
+    access_token: `${crypto.randomUUID()}${crypto.randomUUID()}`.replaceAll("-", ""), status: "programada",
+    started_at: null, completed_at: null, result: null, quality_score: null, quality_flags: [],
+    hour_meter_reading: null, start_lat: null, start_lng: null, signature_name: null, ai_summary: null, created_at: created,
+  }, items: previousItems.map((item) => ({
+    ...item, id: crypto.randomUUID(), inspection_id: inspectionId, value_text: null, value_number: null,
+    passed: null, notes: null, photo_paths: [], photo_hashes: [], photo_slots: [], manual_confirmed: false,
+    photo_taken_at: null, shown_at: null, answered_at: null, seconds_spent: null, flags: [], created_at: created,
+  })) });
+  return db.get("inspections", inspectionId);
 }

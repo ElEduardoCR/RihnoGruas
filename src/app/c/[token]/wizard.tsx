@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useMemo, useRef, useState, useTransition } from "react";
-import { AlertTriangle, ArrowLeft, Bot, Camera, Check, CheckCircle2, ChevronRight, Loader2, MapPin, Plus, ShieldX, X } from "lucide-react";
+import { AlertTriangle, ArrowLeft, BookOpen, Bot, Camera, Check, CheckCircle2, ChevronRight, Loader2, MapPin, Plus, ShieldX, X } from "lucide-react";
 import type { CraneType } from "@/lib/types";
 import { CraneArt, RhinoMark } from "@/components/brand";
 import { cx } from "@/components/ui";
@@ -12,8 +12,8 @@ import type { WizardItem } from "./types";
 
 interface Props {
   token: string;
-  inspection: { title: string; status: string; started: boolean; scheduledFor: string; dueBy: string; result: string | null; score: number | null };
-  crane: { code: string; name: string; type: CraneType; hourMeter: number };
+  inspection: { title: string; kind?: string; status: string; started: boolean; scheduledFor: string; dueBy: string; result: string | null; score: number | null };
+  crane: { code: string; name: string; type: CraneType; hourMeter: number | null };
   assignee: string | null;
   initialItems: WizardItem[];
 }
@@ -28,11 +28,12 @@ export function Wizard({ token, inspection, crane, assignee, initialItems }: Pro
   const [items, setItems] = useState(initialItems);
   const firstPending = items.findIndex((i) => !i.answered);
   const done = inspection.status === "completada";
+  const isMaintenance = inspection.kind === "mantenimiento";
   // -1 = portada, items.length = firma
   const [step, setStep] = useState<number>(done ? items.length + 1 : inspection.started ? (firstPending < 0 ? items.length : firstPending) : -1);
   const [final, setFinal] = useState<{ result: string | null; score: number | null; flags: string[] } | null>(done ? { result: inspection.result, score: inspection.score, flags: [] } : null);
 
-  const progress = step < 0 ? 0 : Math.min(1, items.filter((i) => i.answered).length / items.length);
+  const progress = step < 0 || items.length === 0 ? 0 : Math.min(1, items.filter((i) => i.answered).length / items.length);
   const agentItems = items.filter((i) => i.source !== "plantilla");
 
   return (
@@ -59,7 +60,9 @@ export function Wizard({ token, inspection, crane, assignee, initialItems }: Pro
         {inspection.status === "cancelada" ? (
           <Message icon={<X className="size-8" />} title="Revisión cancelada" text="Esta revisión ya no es necesaria." />
         ) : final ? (
-          <Done final={final} crane={crane} />
+          <Done final={final} crane={crane} maintenance={isMaintenance} />
+        ) : items.length === 0 ? (
+          <Message icon={<AlertTriangle className="size-8" />} title="Checklist sin pasos" text="Pide al responsable de taller que revise la plantilla antes de comenzar." />
         ) : step === -1 ? (
           <Intro
             crane={crane}
@@ -68,7 +71,7 @@ export function Wizard({ token, inspection, crane, assignee, initialItems }: Pro
             agentItems={agentItems}
             onStart={async (coords) => {
               await startAction(token, coords);
-              setStep(firstPending < 0 ? 0 : firstPending);
+              setStep(firstPending < 0 ? items.length : firstPending);
             }}
           />
         ) : step < items.length ? (
@@ -90,6 +93,7 @@ export function Wizard({ token, inspection, crane, assignee, initialItems }: Pro
         ) : (
           <Sign
             items={items}
+            maintenance={isMaintenance}
             hourMeter={crane.hourMeter}
             onGoto={setStep}
             onSubmit={async (name, hm) => {
@@ -119,14 +123,22 @@ function Intro({
   onStart: (coords: { lat: number; lng: number } | null) => Promise<void>;
 }) {
   const [busy, setBusy] = useState(false);
+  const [error, setError] = useState<string | null>(null);
+  const maintenance = inspection.kind === "mantenimiento";
   const start = async () => {
     setBusy(true);
-    const coords = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
-      if (!navigator.geolocation) return resolve(null);
-      navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), () => resolve(null), { timeout: 6000, maximumAge: 60000 });
-    });
-    await onStart(coords);
-    setBusy(false);
+    setError(null);
+    try {
+      const coords = await new Promise<{ lat: number; lng: number } | null>((resolve) => {
+        if (!navigator.geolocation) return resolve(null);
+        navigator.geolocation.getCurrentPosition((p) => resolve({ lat: p.coords.latitude, lng: p.coords.longitude }), () => resolve(null), { timeout: 6000, maximumAge: 60000 });
+      });
+      await onStart(coords);
+    } catch (e) {
+      setError(e instanceof Error ? e.message : "No se pudo abrir la revisión. Intenta de nuevo.");
+    } finally {
+      setBusy(false);
+    }
   };
   const fmtDate = (s: string) => new Intl.DateTimeFormat("es-MX", { timeZone: "America/Mexico_City", weekday: "short", day: "numeric", month: "short", hour: "2-digit", minute: "2-digit", hour12: false }).format(new Date(s));
   return (
@@ -136,10 +148,17 @@ function Intro({
       </div>
       <h1 className="mt-6 text-[30px] leading-tight font-semibold">{crane.code} · {crane.name}</h1>
       <p className="mt-2 text-[15px] text-muted">
-        {total} puntos · aprox. {Math.max(10, Math.round(total * 0.8))} min · antes de {fmtDate(inspection.dueBy)}
+        {total} pasos{maintenance ? "" : ` · aprox. ${Math.max(10, Math.round(total * 0.8))} min`} · antes de {fmtDate(inspection.dueBy)}
       </p>
 
-      {agentItems.length > 0 && (
+      {maintenance && (
+        <div className="mt-5 rounded-2xl border border-warn-mid/30 bg-warn-soft p-4 text-[14px] leading-relaxed text-ink-2">
+          <div className="flex items-center gap-2 font-semibold text-ink"><BookOpen className="size-4 shrink-0" /> Manual de esta unidad</div>
+          <p className="mt-2">La guía se preparó con las fuentes del expediente. Antes de intervenir, confirma el manual que corresponde al modelo y número de serie. Si no coincide o falta, deja el primer paso pendiente.</p>
+        </div>
+      )}
+
+      {!maintenance && agentItems.length > 0 && (
         <div className="mt-6 rounded-3xl border border-rhino-100 bg-rhino-50/60 p-5">
           <div className="flex items-center gap-2 text-[14px] font-semibold text-rhino-700">
             <Bot className="size-4" /> {agentItems.length} puntos específicos para esta grúa
@@ -156,15 +175,17 @@ function Intro({
       )}
 
       <ul className="mt-6 space-y-3 text-[14px] text-ink-2">
-        <li className="flex gap-3"><Camera className="size-5 shrink-0 text-rhino-500" />Cada punto requiere al menos una foto tomada en este momento; algunos piden varias (p. ej. los 4 lados).</li>
-        <li className="flex gap-3"><MapPin className="size-5 shrink-0 text-rhino-500" />Debes estar frente a la grúa; se registra la ubicación al iniciar.</li>
-        <li className="flex gap-3"><AlertTriangle className="size-5 shrink-0 text-rhino-500" />Si algo falla, descríbelo. Las fallas críticas detienen la grúa.</li>
+        <li className="flex gap-3"><Camera className="size-5 shrink-0 text-rhino-500" />Cada paso indica qué fotografiar y cuántas tomas necesita. El avance se guarda al completar cada paso.</li>
+        <li className="flex gap-3"><MapPin className="size-5 shrink-0 text-rhino-500" />Debes estar frente a la unidad. Si autorizas la ubicación, se registra al iniciar.</li>
+        <li className="flex gap-3"><AlertTriangle className="size-5 shrink-0 text-rhino-500" />Si algo falla, descríbelo. Las fallas críticas detienen la unidad.</li>
       </ul>
+
+      {error && <p role="alert" className="mt-4 rounded-xl bg-rhino-50 p-3 text-[14px] text-rhino-700">{error}</p>}
 
       <div className="mt-auto pt-8">
         <button onClick={start} disabled={busy} className="flex h-14 w-full items-center justify-center gap-2 rounded-2xl bg-rhino-500 text-[17px] font-semibold text-white active:scale-[0.99] disabled:opacity-60">
           {busy ? <Loader2 className="size-5 animate-spin" /> : null}
-          {inspection.started ? "Continuar revisión" : "Comenzar revisión"}
+          {inspection.started ? "Continuar checklist" : maintenance ? "Comenzar checklist" : "Comenzar revisión"}
         </button>
       </div>
     </div>
@@ -178,6 +199,7 @@ type Shot = {
   hash: string;
   takenAt: string | null;
   status: "subiendo" | "lista" | "error";
+  slot: number;
   error?: string;
 };
 
@@ -200,9 +222,11 @@ function Step({
 }) {
   const shownAt = useRef(new Date().toISOString());
   const fileRef = useRef<HTMLInputElement>(null);
+  const captureSlot = useRef(0);
+  const captureBusy = useRef(false);
   const blobUrls = useRef<string[]>([]);
   const [shots, setShots] = useState<Shot[]>(() =>
-    item.photos.map((p) => ({ key: p.path, url: `/api/files/evidencias/${p.path}?t=${token}`, path: p.path, hash: p.hash, takenAt: p.takenAt, status: "lista" as const })),
+    item.photos.map((p) => ({ key: p.path, url: `/api/files/evidencias/${p.path}?t=${token}`, path: p.path, hash: p.hash, takenAt: p.takenAt, slot: p.slot, status: "lista" as const })),
   );
   const [passed, setPassed] = useState<boolean | null>(item.answered ? item.passed : null);
   const [value, setValue] = useState(item.response_type === "numero" ? (item.value_number?.toString() ?? "") : (item.value_text ?? ""));
@@ -210,46 +234,64 @@ function Step({
   const [error, setError] = useState<string | null>(null);
   const [pending, start] = useTransition();
   const [processing, setProcessing] = useState(false);
+  const [activeCaptureSlot, setActiveCaptureSlot] = useState<number | null>(null);
+  const [manualConfirmed, setManualConfirmed] = useState(item.manual_confirmed);
+  const [manualMissing, setManualMissing] = useState(false);
 
   useEffect(() => () => blobUrls.current.forEach((u) => URL.revokeObjectURL(u)), []);
 
   const needed = item.requires_photo ? Math.max(1, item.min_photos) : 0;
   const ready = shots.filter((s) => s.status === "lista");
   const uploading = shots.some((s) => s.status === "subiendo");
-  const missingPhotos = Math.max(0, needed - ready.length);
+  const requiredSlots = Array.from({ length: needed }, (_, i) => i);
+  const missingPhotos = requiredSlots.filter((slot) => !ready.some((s) => s.slot === slot)).length;
   const canAdd = shots.length < MAX_PHOTOS;
-  const answerOk = item.response_type === "ok_falla" ? passed !== null : item.response_type === "numero" ? value.trim() !== "" && !Number.isNaN(Number(value)) : value.trim().length > 1;
+  const answerOk = item.response_type === "ok_falla" ? passed !== null : item.response_type === "numero" ? value.trim() !== "" && Number.isFinite(Number(value)) : value.trim().length > 1;
   const needsNotes = passed === false && notes.trim().length < 4;
-  const canNext = missingPhotos === 0 && !uploading && answerOk && !needsNotes;
+  const manualOk = !item.requires_manual_confirmation || (manualConfirmed && !manualMissing);
+  const canNext = missingPhotos === 0 && !uploading && answerOk && !needsNotes && manualOk;
+  const shotLabel = (slot: number) => item.photo_requirements[slot] ?? (slot < needed ? item.photo_hint ?? `Punto revisado · toma ${slot + 1}` : `Evidencia adicional ${slot - needed + 1}`);
+  const choosePhoto = (slot: number) => {
+    if (processing || pending || captureBusy.current) return;
+    captureSlot.current = slot;
+    setActiveCaptureSlot(slot);
+    fileRef.current?.click();
+  };
 
   const onFile = async (f: File | undefined) => {
-    if (!f) return;
+    if (!f || captureBusy.current) return;
+    const slot = captureSlot.current;
+    if (shots.length >= MAX_PHOTOS || shots.some((s) => s.slot === slot)) return;
+    captureBusy.current = true;
     setError(null);
     setProcessing(true);
-    const hash = await sha256(await f.arrayBuffer());
-    if (shots.some((s) => s.hash === hash)) {
+    let shotKey: string | null = null;
+    try {
+      const blob = await compress(f);
+      const hash = await sha256(await blob.arrayBuffer());
+      if (shots.some((s) => s.hash === hash)) throw new Error("Ya agregaste esta misma foto a este paso. Toma otra.");
+      if (otherHashes.includes(hash)) throw new Error("Esta foto ya se usó en otro paso. Toma una foto nueva.");
+      shotKey = hash;
+      const takenAt = f.lastModified > 0 ? new Date(f.lastModified).toISOString() : null;
+      const url = URL.createObjectURL(blob);
+      blobUrls.current.push(url);
+      const key = shotKey;
+      setShots((list) => [...list, { key, url, path: null, hash, takenAt, slot, status: "subiendo" }]);
+      const fd = new FormData();
+      fd.set("photo", blob, "foto.jpg");
+      fd.set("hash", hash);
+      if (takenAt) fd.set("takenAt", takenAt);
+      const r = await uploadPhotoAction(token, item.id, fd);
+      if (!r.ok) throw new Error(r.error);
+      setShots((list) => list.map((x) => x.key !== key ? x : { ...x, path: r.photo.path, status: "lista" }));
+    } catch (e) {
+      const message = e instanceof Error ? e.message : "No se pudo procesar la foto. Intenta de nuevo.";
+      setError(message);
+      if (shotKey) setShots((list) => list.map((x) => x.key !== shotKey ? x : { ...x, status: "error", error: message }));
+    } finally {
+      captureBusy.current = false;
       setProcessing(false);
-      return setError("Ya agregaste esta misma foto a este punto. Toma otra.");
     }
-    if (otherHashes.includes(hash)) {
-      setProcessing(false);
-      return setError("Esta foto ya se usó en otro punto. Toma una foto nueva de este punto.");
-    }
-    const blob = await compress(f);
-    setProcessing(false);
-    const key = `${Date.now()}-${hash.slice(0, 6)}`;
-    const takenAt = new Date(f.lastModified || Date.now()).toISOString();
-    const url = URL.createObjectURL(blob);
-    blobUrls.current.push(url);
-    setShots((list) => [...list, { key, url, path: null, hash, takenAt, status: "subiendo" }]);
-    // Se sube en cuanto se toma: si falla la señal sólo se repite esa foto
-    const fd = new FormData();
-    fd.set("photo", blob, "foto.jpg");
-    fd.set("hash", hash);
-    fd.set("takenAt", takenAt);
-    const r = await uploadPhotoAction(token, item.id, fd);
-    setShots((list) => list.map((x) => (x.key !== key ? x : r.ok ? { ...x, path: r.photo.path, status: "lista" } : { ...x, status: "error", error: r.error })));
-    if (!r.ok) setError(r.error);
   };
 
   const remove = (key: string) => {
@@ -265,7 +307,8 @@ function Step({
         value,
         notes,
         shownAt: shownAt.current,
-        photos: ready.map((s) => ({ path: s.path!, hash: s.hash, takenAt: s.takenAt })),
+        photos: [...ready].sort((a, b) => a.slot - b.slot).map((s) => ({ path: s.path!, hash: s.hash, takenAt: s.takenAt, slot: s.slot })),
+        manualConfirmed,
       });
       if (!r.ok) return setError(r.error);
       onSaved(r.item);
@@ -278,12 +321,43 @@ function Step({
         {item.critical && <span className="rounded-full bg-rhino-500 px-2 py-0.5 text-[11px] font-semibold text-white">CRÍTICO</span>}
       </div>
       <h2 className="mt-2 text-[26px] leading-tight font-semibold">{item.title}</h2>
+      {item.source === "plantilla" && item.procedure_steps.length > 0 && item.source_reason && (
+        <p className="mt-3 rounded-2xl bg-canvas px-4 py-3 text-[12px] leading-relaxed text-muted">{item.source_reason}</p>
+      )}
       {item.source !== "plantilla" && item.source_reason && (
         <div className="mt-3 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-white">
           <Bot className="size-3.5" /> {item.source === "agente" ? "Rhino lo agregó:" : "Propio de esta grúa:"} {item.source_reason}
         </div>
       )}
       {item.instructions && <p className="mt-3 text-[15px] leading-relaxed text-ink-2">{item.instructions}</p>}
+
+      {item.procedure_steps.length > 0 && (
+        <ol className="mt-4 space-y-3 rounded-2xl bg-canvas p-4 text-[14px] leading-relaxed text-ink-2">
+          {item.procedure_steps.map((instruction, i) => (
+            <li key={`${i}-${instruction}`} className="flex gap-3">
+              <span className="mt-0.5 grid size-6 shrink-0 place-items-center rounded-full bg-white text-[12px] font-semibold text-ink">{i + 1}</span>
+              <span>{instruction}</span>
+            </li>
+          ))}
+        </ol>
+      )}
+      {item.reference_label && (
+        <div className="mt-3 flex items-start gap-2 text-[12px] leading-relaxed text-muted">
+          <BookOpen className="mt-0.5 size-4 shrink-0" />
+          {item.reference_url ? <a href={item.reference_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{item.reference_label}</a> : <span>{item.reference_label}</span>}
+        </div>
+      )}
+
+      {item.requires_manual_confirmation && (
+        <div className="mt-5 rounded-2xl border border-warn-mid/40 bg-warn-soft p-4 text-[14px] leading-relaxed">
+          <label className="flex items-start gap-3">
+            <input type="checkbox" checked={manualConfirmed} onChange={(e) => { setManualConfirmed(e.target.checked); setManualMissing(false); }} className="mt-1 size-5 shrink-0 accent-[#e3261b]" />
+            <span>Confirmo que tengo el manual aplicable al modelo y número de serie de esta unidad, y que verifiqué el procedimiento de este trabajo.</span>
+          </label>
+          <button type="button" onClick={() => { setManualMissing(true); setManualConfirmed(false); }} className="mt-3 min-h-10 text-left font-medium underline underline-offset-2">No tengo el manual correcto</button>
+          {manualMissing && <p role="status" className="mt-2 rounded-xl bg-white/70 p-3">No continúes ni intervengas el equipo sin el manual correcto. Puedes cerrar y retomar el paso cuando lo tengas; este aviso no se registra como falla mecánica.</p>}
+        </div>
+      )}
 
       {/* Fotos */}
       <input
@@ -298,76 +372,46 @@ function Step({
           onFile(f);
         }}
       />
-      <div className="mt-5 flex items-baseline justify-between">
-        <span className="text-[13px] font-medium text-ink-2">{item.photo_hint ?? "Foto del punto revisado"}</span>
-        {(needed > 1 || shots.length > 1) && (
-          <span className={cx("tabular text-[13px] font-semibold", missingPhotos ? "text-rhino-600" : "text-ok")}>
-            {ready.length}
-            {needed > 1 ? ` / ${needed}` : ""} fotos
-          </span>
+      <div className="mt-5 flex items-baseline justify-between gap-3">
+        <span className="text-[14px] font-semibold text-ink">{needed ? "Fotos necesarias" : "Fotos de apoyo (opcional)"}</span>
+        <span className={cx("tabular shrink-0 text-[13px] font-semibold", missingPhotos ? "text-rhino-600" : "text-ok")}>
+          {needed ? `${needed - missingPhotos} / ${needed} tomas` : `${ready.length} fotos`}
+        </span>
+      </div>
+      {item.photo_hint && <p className="mt-1 text-[12px] leading-relaxed text-muted">{item.photo_hint}</p>}
+      <div className="mt-3 space-y-3">
+        {requiredSlots.map((slot) => {
+          const shot = shots.find((s) => s.slot === slot);
+          return (
+            <section key={slot} className="overflow-hidden rounded-2xl border border-line-2">
+              <div className="flex items-start gap-2.5 bg-canvas px-3 py-3 text-[13px] leading-relaxed">
+                <span className={cx("grid size-6 shrink-0 place-items-center rounded-full text-[12px] font-semibold", shot?.status === "lista" ? "bg-ink text-white" : "bg-white text-ink")}>{slot + 1}</span>
+                <span className="flex-1">{shotLabel(slot)}</span>
+                {shot?.status === "lista" && <CheckCircle2 className="mt-0.5 size-4 shrink-0 text-ok" aria-label="Foto subida" />}
+              </div>
+              {shot ? (
+                <ShotTile shot={shot} label={shotLabel(slot)} onRemove={() => remove(shot.key)} disabled={pending} />
+              ) : (
+                <button type="button" onClick={() => choosePhoto(slot)} disabled={processing || pending} className="flex min-h-28 w-full items-center justify-center gap-3 bg-white px-4 py-6 text-[15px] font-semibold text-ink transition active:bg-canvas disabled:opacity-50">
+                  {processing && activeCaptureSlot === slot ? <Loader2 className="size-6 animate-spin" /> : <Camera className="size-6" />}
+                  Tomar foto {slot + 1}
+                </button>
+              )}
+            </section>
+          );
+        })}
+        {shots.filter((s) => s.slot >= needed).sort((a, b) => a.slot - b.slot).map((shot) => (
+          <section key={shot.key} className="overflow-hidden rounded-2xl border border-line-2">
+            <div className="bg-canvas px-3 py-2 text-[13px] font-medium">{shotLabel(shot.slot)}</div>
+            <ShotTile shot={shot} label={shotLabel(shot.slot)} onRemove={() => remove(shot.key)} disabled={pending} />
+          </section>
+        ))}
+        {canAdd && missingPhotos === 0 && (
+          <button type="button" onClick={() => choosePhoto(Array.from({ length: MAX_PHOTOS }, (_, i) => i).find((slot) => !shots.some((s) => s.slot === slot))!)} disabled={processing || pending} className="flex min-h-12 w-full items-center justify-center gap-2 rounded-2xl border-2 border-dashed border-line-2 px-4 py-3 text-[14px] font-semibold text-ink-2 disabled:opacity-50">
+            {processing ? <Loader2 className="size-4 animate-spin" /> : <Plus className="size-4" />} Agregar foto adicional
+          </button>
         )}
       </div>
-      {shots.length === 0 ? (
-        <button
-          type="button"
-          onClick={() => fileRef.current?.click()}
-          className="mt-2 flex aspect-[4/3] w-full flex-col items-center justify-center rounded-[24px] border-2 border-dashed border-line-2 bg-canvas transition active:bg-line"
-        >
-          {processing ? (
-            <Loader2 className="size-8 animate-spin text-muted" />
-          ) : (
-            <>
-              <span className="grid size-16 place-items-center rounded-full bg-ink text-white"><Camera className="size-7" /></span>
-              <span className="mt-3 text-[16px] font-semibold">Tomar foto</span>
-              <span className="mt-1 px-6 text-center text-[13px] text-muted">
-                {needed > 1 ? `Este punto pide ${needed} fotos` : "Foto tomada en este momento"}
-              </span>
-            </>
-          )}
-        </button>
-      ) : (
-        <div className="mt-2 grid grid-cols-2 gap-2">
-          {shots.map((s, i) => (
-            <div key={s.key} className="relative aspect-[4/3] overflow-hidden rounded-2xl bg-canvas">
-              {/* eslint-disable-next-line @next/next/no-img-element */}
-              <img src={s.url} alt={`Evidencia ${i + 1}`} className="absolute inset-0 size-full object-cover" />
-              <span className="absolute bottom-2 left-2 grid size-6 place-items-center rounded-full bg-black/65 text-[12px] font-semibold text-white">{i + 1}</span>
-              {s.status === "subiendo" && (
-                <div className="absolute inset-0 grid place-items-center bg-black/35">
-                  <Loader2 className="size-7 animate-spin text-white" />
-                </div>
-              )}
-              {s.status === "error" && (
-                <div className="absolute inset-0 flex items-center justify-center bg-rhino-600/80 px-3 text-center text-[12px] font-medium text-white">No se subió · quítala y tómala de nuevo</div>
-              )}
-              <button
-                type="button"
-                onClick={() => remove(s.key)}
-                disabled={s.status === "subiendo"}
-                className="absolute top-2 right-2 grid size-8 place-items-center rounded-full bg-black/65 text-white backdrop-blur disabled:opacity-40"
-                aria-label={`Quitar foto ${i + 1}`}
-              >
-                <X className="size-4" />
-              </button>
-            </div>
-          ))}
-          {canAdd && (
-            <button
-              type="button"
-              onClick={() => fileRef.current?.click()}
-              disabled={processing}
-              className={cx(
-                "flex aspect-[4/3] flex-col items-center justify-center rounded-2xl border-2 border-dashed transition active:bg-line",
-                missingPhotos ? "border-rhino-200 bg-rhino-50/50 text-rhino-700" : "border-line-2 bg-canvas text-ink-2",
-              )}
-            >
-              {processing ? <Loader2 className="size-6 animate-spin" /> : <Plus className="size-6" />}
-              <span className="mt-1.5 text-[14px] font-semibold">Agregar foto</span>
-              {missingPhotos > 0 && <span className="text-[12px]">faltan {missingPhotos}</span>}
-            </button>
-          )}
-        </div>
-      )}
 
       {/* Respuesta */}
       {item.response_type === "ok_falla" && (
@@ -393,7 +437,7 @@ function Step({
         </label>
       )}
       {item.response_type === "texto" && (
-        <textarea value={value} onChange={(e) => setValue(e.target.value)} rows={3} className="mt-5 w-full rounded-2xl border-2 border-line-2 p-4 text-[16px] outline-none focus:border-ink" placeholder="Escribe lo que revisaste" />
+        <textarea value={value} onChange={(e) => setValue(e.target.value)} rows={3} aria-label={item.requires_manual_confirmation ? "Identificación del manual verificado" : "Resultado del paso"} className="mt-5 w-full rounded-2xl border-2 border-line-2 p-4 text-[16px] outline-none focus:border-ink" placeholder={item.requires_manual_confirmation ? "Código y edición del manual, modelo y serie comprobados" : "Escribe lo que revisaste"} />
       )}
       {(passed === false || item.response_type !== "ok_falla") && (
         <textarea
@@ -408,7 +452,7 @@ function Step({
       {error && <div className="mt-4 rounded-2xl bg-rhino-50 px-4 py-3 text-[14px] font-medium text-rhino-700">{error}</div>}
 
       <div className="mt-auto flex gap-3 pt-6">
-        <button type="button" onClick={onBack} disabled={index === 0} className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-line-2 disabled:opacity-30" aria-label="Anterior">
+        <button type="button" onClick={onBack} disabled={index === 0 || pending || processing} className="grid h-14 w-14 shrink-0 place-items-center rounded-2xl border-2 border-line-2 disabled:opacity-30" aria-label="Anterior">
           <ArrowLeft className="size-5" />
         </button>
         <button type="button" onClick={submit} disabled={!canNext || pending || processing} className="flex h-14 flex-1 items-center justify-center gap-2 rounded-2xl bg-rhino-500 text-[17px] font-semibold text-white disabled:bg-line-2 disabled:text-muted">
@@ -426,8 +470,10 @@ function Step({
                 : missingPhotos === 1
                   ? "Falta 1 foto"
                   : `Faltan ${missingPhotos} fotos`
-              : !answerOk
-                ? "Falta tu respuesta"
+              : !manualOk
+                ? "Falta confirmar el manual aplicable a la unidad"
+                : !answerOk
+                  ? "Falta tu respuesta"
                 : needsNotes
                   ? "Describe la falla"
                   : ""}
@@ -437,7 +483,19 @@ function Step({
   );
 }
 
-function Sign({ items, hourMeter, onGoto, onSubmit }: { items: WizardItem[]; hourMeter: number; onGoto: (i: number) => void; onSubmit: (name: string, hm: number | null) => Promise<string | null> }) {
+function ShotTile({ shot, label, onRemove, disabled }: { shot: Shot; label: string; onRemove: () => void; disabled: boolean }) {
+  return (
+    <div className="relative aspect-[4/3] bg-canvas">
+      {/* eslint-disable-next-line @next/next/no-img-element */}
+      <img src={shot.url} alt={label} className="absolute inset-0 size-full object-contain" />
+      {shot.status === "subiendo" && <div className="absolute inset-0 grid place-items-center bg-black/35"><Loader2 className="size-7 animate-spin text-white" /></div>}
+      {shot.status === "error" && <div className="absolute inset-0 flex items-center justify-center bg-rhino-600/80 px-8 text-center text-[13px] font-medium text-white">No se subió. Quita esta foto y toma otra.</div>}
+      <button type="button" onClick={onRemove} disabled={shot.status === "subiendo" || disabled} className="absolute top-2 right-2 grid size-10 place-items-center rounded-full bg-black/65 text-white backdrop-blur disabled:opacity-40" aria-label={`Quitar foto: ${label}`}><X className="size-5" /></button>
+    </div>
+  );
+}
+
+function Sign({ items, hourMeter, maintenance, onGoto, onSubmit }: { items: WizardItem[]; hourMeter: number | null; maintenance: boolean; onGoto: (i: number) => void; onSubmit: (name: string, hm: number | null) => Promise<string | null> }) {
   const [name, setName] = useState("");
   const [agree, setAgree] = useState(false);
   const [error, setError] = useState<string | null>(null);
@@ -477,12 +535,12 @@ function Sign({ items, hourMeter, onGoto, onSubmit }: { items: WizardItem[]; hou
         </ul>
         {failed.some(({ it }) => it.critical) && (
           <p className="mt-3 rounded-2xl bg-rhino-500 px-4 py-3 text-[13px] font-medium text-white">
-            Hay fallas críticas: al firmar, la grúa quedará detenida y Rhino avisará a Dirección.
+            Hay fallas críticas: al firmar, la unidad quedará detenida y Rhino avisará a Dirección.
           </p>
         )}
       </div>
 
-      {!hmItem && <p className="mt-4 text-[13px] text-muted">Horómetro registrado: {hourMeter} h</p>}
+      {!hmItem && <p className="mt-4 text-[13px] text-muted">Horómetro registrado: {hourMeter == null ? "Pendiente" : `${hourMeter} h`}</p>}
 
       <label className="mt-6 block">
         <span className="text-[13px] font-medium text-ink-2">Nombre completo (firma)</span>
@@ -490,8 +548,9 @@ function Sign({ items, hourMeter, onGoto, onSubmit }: { items: WizardItem[]; hou
       </label>
       <label className="mt-4 flex items-start gap-3 text-[14px] text-ink-2">
         <input type="checkbox" checked={agree} onChange={(e) => setAgree(e.target.checked)} className="mt-0.5 size-5 accent-[#e3261b]" />
-        Declaro que realicé esta revisión físicamente, frente a la grúa, y que las fotos fueron tomadas durante la revisión.
+        Declaro que realicé {maintenance ? "los pasos registrados de este mantenimiento" : "esta revisión"} físicamente, frente a la unidad, y que las fotos corresponden al trabajo realizado.
       </label>
+      {maintenance && <p className="mt-3 text-[12px] leading-relaxed text-muted">La firma guarda este checklist. El responsable del taller revisa el resultado antes de cerrar la orden de mantenimiento; no libera por sí sola la unidad para operar.</p>}
       {error && <div className="mt-4 rounded-2xl bg-rhino-50 px-4 py-3 text-[14px] font-medium text-rhino-700">{error}</div>}
       <div className="mt-auto pt-6">
         <button
@@ -511,7 +570,7 @@ function Sign({ items, hourMeter, onGoto, onSubmit }: { items: WizardItem[]; hou
   );
 }
 
-function Done({ final, crane }: { final: { result: string | null; score: number | null; flags: string[] }; crane: Props["crane"] }) {
+function Done({ final, crane, maintenance }: { final: { result: string | null; score: number | null; flags: string[] }; crane: Props["crane"]; maintenance: boolean }) {
   const ok = final.result === "aprobada";
   const rejected = final.result === "rechazada";
   return (
@@ -519,9 +578,13 @@ function Done({ final, crane }: { final: { result: string | null; score: number 
       <div className={cx("grid size-24 place-items-center rounded-full", ok ? "bg-ok-soft text-ok" : rejected ? "bg-rhino-500 text-white" : "bg-warn-soft text-warn")}>
         {ok ? <CheckCircle2 className="size-12" /> : rejected ? <ShieldX className="size-12" /> : <AlertTriangle className="size-12" />}
       </div>
-      <h2 className="mt-6 text-[30px] font-semibold">{ok ? "Revisión aprobada" : rejected ? "Grúa detenida" : "Aprobada con observaciones"}</h2>
+      <h2 className="mt-6 text-[30px] font-semibold">{maintenance ? rejected ? "Mantenimiento con falla crítica" : "Checklist de mantenimiento registrado" : ok ? "Revisión aprobada" : rejected ? "Unidad detenida" : "Aprobada con observaciones"}</h2>
       <p className="mt-2 max-w-sm text-[15px] text-muted">
-        {ok
+        {maintenance
+          ? rejected
+            ? `Se registraron fallas críticas en ${crane.code}. La unidad permanece fuera de servicio hasta que el responsable del taller resuelva y verifique las fallas.`
+            : "Las respuestas, fotos y firma quedaron guardadas. El responsable del taller debe revisar este resultado y cerrar la orden; este checklist no libera automáticamente la unidad."
+          : ok
           ? `${crane.code} está lista para salir. Gracias por hacerlo con cuidado.`
           : rejected
             ? `Se encontraron fallas críticas. ${crane.code} quedó fuera de servicio y Rhino ya avisó a Dirección y al taller.`

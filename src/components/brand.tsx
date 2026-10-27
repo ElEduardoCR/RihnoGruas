@@ -30,6 +30,56 @@ export function CraneArt({ type, className = "h-full w-full", tone = "light" }: 
   const stroke = tone === "dark" ? "#fff" : "#1d1d1f";
   const accent = "#e3261b";
   const ground = tone === "dark" ? "rgba(255,255,255,.18)" : "rgba(0,0,0,.08)";
+  if (type === "vehiculo_apoyo" || type === "tractocamion" || type === "remolque") {
+    return (
+      <svg viewBox="0 0 240 140" className={className} aria-hidden>
+        <line x1="10" y1="128" x2="230" y2="128" stroke={ground} strokeWidth="2" />
+        {type === "remolque" ? (
+          <>
+            <path d="M24 72h28v25h162v12H42V84H24z" fill={accent} />
+            <path d="M60 109v14M56 123h14" stroke={stroke} strokeWidth="4" />
+          </>
+        ) : type === "tractocamion" ? (
+          <>
+            <rect x="32" y="96" width="174" height="15" rx="3" fill={stroke} />
+            <path d="M132 95V52h43l20 27h19v32h-82z" fill={accent} />
+            <path d="M155 60h16l15 20h-31z" fill={tone === "dark" ? "#0b0b0c" : "#fff"} />
+            <path d="M66 89h40" stroke={stroke} strokeWidth="6" strokeLinecap="round" />
+          </>
+        ) : (
+          <>
+            <path d="M30 104V88l33-8 22-28h74l28 31 25 9v20H30z" fill={accent} />
+            <path d="M91 60h29v23H73zM128 60h26l21 23h-47z" fill={tone === "dark" ? "#0b0b0c" : "#fff"} />
+          </>
+        )}
+        {(type === "remolque" ? [160, 190] : type === "tractocamion" ? [58, 86, 190] : [61, 180]).map((x) => (
+          <g key={x}>
+            <circle cx={x} cy="114" r="12" fill={stroke} />
+            <circle cx={x} cy="114" r="5" fill={tone === "dark" ? "#0b0b0c" : "#fff"} />
+          </g>
+        ))}
+      </svg>
+    );
+  }
+  if (type === "telehandler") {
+    return (
+      <svg viewBox="0 0 240 140" className={className} aria-hidden>
+        <line x1="10" y1="128" x2="230" y2="128" stroke={ground} strokeWidth="2" />
+        <rect x="35" y="90" width="112" height="22" rx="5" fill={accent} />
+        <path d="M59 92V58h36l10 34z" fill={stroke} />
+        <path d="M65 64h24l8 23H65z" fill={tone === "dark" ? "#0b0b0c" : "#fff"} />
+        <path d="M112 91 196 39" stroke={stroke} strokeWidth="12" strokeLinecap="round" />
+        <path d="M145 70 196 39" stroke={accent} strokeWidth="4" strokeLinecap="round" />
+        <path d="M197 40v35h27M204 74v9h20" stroke={stroke} strokeWidth="4" fill="none" />
+        {[55, 132].map((x) => (
+          <g key={x}>
+            <circle cx={x} cy="112" r="15" fill={stroke} />
+            <circle cx={x} cy="112" r="6" fill={tone === "dark" ? "#0b0b0c" : "#fff"} />
+          </g>
+        ))}
+      </svg>
+    );
+  }
   if (type === "grua_armable") {
     return (
       <svg viewBox="0 0 240 140" className={className} aria-hidden>

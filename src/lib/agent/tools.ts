@@ -4,7 +4,7 @@ import { docStatus } from "@/lib/domain/fleet";
 import { CHECKLIST_KIND_LABELS, CRANE_TYPE_LABELS, DOC_LABELS, PURCHASE_CATEGORY_LABELS } from "@/lib/labels";
 import { env } from "@/lib/env";
 import { findCrane, getCraneDossier, getEvents, getFleet } from "@/lib/services/fleet";
-import { craneConflicts, createRental, documentIssues, findAvailable, preInspectionTime } from "@/lib/services/rentals";
+import { craneConflicts, createRental, documentIssues, findAvailable, identificationIssue, preInspectionTime } from "@/lib/services/rentals";
 import { scheduleInspection, listInspections } from "@/lib/services/inspections";
 import { releaseCrane, reportDowntime, scheduleMaintenance } from "@/lib/services/maintenance";
 import { findMovement, getStock, inventoryWatch, registerPurchase, requestIssue, resolveMovement } from "@/lib/services/inventory";
@@ -61,7 +61,7 @@ const obj = (properties: Record<string, Schema>): Schema => ({
   additionalProperties: false,
 });
 
-const CRANE_TYPES = ["grua_movil", "camion_grua", "grua_armable"];
+const CRANE_TYPES = Object.keys(CRANE_TYPE_LABELS);
 const MGMT: StaffRole[] = ["direccion", "administracion"];
 const DATE_HINT = "Fecha local CDMX en formato YYYY-MM-DD o YYYY-MM-DDTHH:mm";
 
@@ -78,7 +78,7 @@ async function craneOrThrow(db: Db, q: unknown) {
   const c = await findCrane(db, String(q ?? ""));
   if (!c) {
     const all = await db.select("cranes", { eq: { active: true }, order: { column: "code" } });
-    throw new ToolError(`No encontré la grúa "${q}". Grúas: ${all.map((x) => `${x.code} ${x.name}`).join(", ")}.`);
+    throw new ToolError(`No encontré una única unidad para "${q}". Usa su código completo (GR-03, AP-03 o RH-04); el prefijo distingue números repetidos. Unidades: ${all.map((x) => `${x.code} ${x.name}`).join(", ")}.`);
   }
   return c;
 }
@@ -110,7 +110,7 @@ const craneLabel = (c: { code: string; name: string }) => `${c.code} ${c.name}`;
 const consultarFlota: ReadTool = {
   kind: "read",
   name: "consultar_flota",
-  description: "Estado actual de todas las grúas: disponible, rentada, mantenimiento o detenida, con evento actual, siguiente evento, salud documental y % de uso hacia el siguiente servicio.",
+  description: "Estado de agenda de la flota: disponible, rentada, mantenimiento o detenida, con evento actual y siguiente. Disponible sólo describe la agenda: una restriccion_renta impide ofrecer la unidad. Datos no verificados se devuelven null o sin_documentos.",
   parameters: obj({
     estado: optEn(["disponible", "rentada", "mantenimiento", "detenida"], "Filtrar por estado, o null para todas"),
     tipo: optEn(CRANE_TYPES, "Filtrar por tipo, o null"),
@@ -126,8 +126,9 @@ const consultarFlota: ReadTool = {
         estado: c.status,
         ahora: c.current ? `${c.current.kind}: ${c.current.title} (hasta ${c.current.open ? "sin fecha" : fmt.dateTime(c.current.end)})` : null,
         siguiente: c.next ? `${c.next.kind}: ${c.next.title} (${fmt.dateTime(c.next.start)})` : null,
-        documentos: c.docHealth,
-        uso_servicio_pct: Math.round(c.service.pct * 100),
+        documentos: c.documents.length ? c.docHealth : "sin_documentos",
+        restriccion_renta: identificationIssue(c),
+        uso_servicio_pct: c.service.known ? Math.round(c.service.pct * 100) : null,
         tarifa_dia: c.daily_rate,
       }));
   },
@@ -137,7 +138,7 @@ const consultarGrua: ReadTool = {
   kind: "read",
   name: "consultar_grua",
   description: "Expediente completo de una grúa: datos técnicos, documentos con vigencia, operadores aprobados, agenda próxima, última revisión, mantenimiento, consumo de almacén y gasto.",
-  parameters: obj({ grua: str("Número económico (RH-04), nombre o modelo de la grúa") }),
+  parameters: obj({ grua: str("Código completo (GR-03, AP-03, RH-04), nombre o modelo único de la unidad") }),
   async run(a, { db, now }) {
     const c = await craneOrThrow(db, a.grua);
     const d = (await getCraneDossier(db, c.id, now))!;
@@ -152,8 +153,10 @@ const consultarGrua: ReadTool = {
       placas: c.plates,
       serie: c.serial_number,
       horometro_h: c.hour_meter,
-      servicio: `${Math.round(d.service.used)} de ${c.service_interval_hours} h usadas desde el último servicio`,
+      ficha_investigada: c.fleet_profile ?? null,
+      servicio: d.service.known ? `${Math.round(d.service.used)} de ${c.service_interval_hours} h usadas desde el último servicio` : "Pendiente: faltan horómetro, historial o intervalo confirmado",
       estado: d.status,
+      restriccion_renta: identificationIssue(c),
       detencion_abierta: d.downtimes.find((x) => !x.ended_at)?.reason ?? null,
       documentos: d.documents.map((doc) => {
         const s = docStatus(doc, now);
@@ -188,7 +191,7 @@ const buscarDisponibilidad: ReadTool = {
   parameters: obj({
     desde: str(`Inicio. ${DATE_HINT}. Si sólo es fecha se toma 00:00`),
     hasta: str(`Fin. ${DATE_HINT}. Si sólo es fecha se toma 23:59`),
-    tipo: optEn(CRANE_TYPES, "grua_movil, camion_grua (Titán) o grua_armable; null para todas"),
+    tipo: optEn(CRANE_TYPES, "Tipo de unidad: grúa móvil, camión grúa, armable, telehandler, tractocamión, remolque o vehículo de apoyo; null para todas"),
     capacidad_minima: optNum("Toneladas mínimas, o null"),
   }),
   async run(a, { db, now }) {

@@ -1,6 +1,9 @@
-// Tipos de fila que reflejan supabase/migrations/20261016000000_init.sql
+import type { FleetProfile } from "@/lib/fleet/types";
 
-export type CraneType = "grua_movil" | "camion_grua" | "grua_armable";
+// Tipos de fila que reflejan el esquema de Supabase.
+
+export const CRANE_TYPES = ["grua_movil", "camion_grua", "grua_armable", "telehandler", "tractocamion", "remolque", "vehiculo_apoyo"] as const;
+export type CraneType = (typeof CRANE_TYPES)[number];
 export type CraneStatus = "disponible" | "rentada" | "mantenimiento" | "detenida";
 export type StaffRole = "direccion" | "administracion" | "operador" | "mecanico" | "almacen" | "ventas";
 export type AlertTopic = "documentos" | "inventario" | "agenda" | "gastos" | "checklists" | "resumen" | "flota";
@@ -25,6 +28,7 @@ export interface Staff {
 
 export interface Crane {
   id: string;
+  fleet_profile?: FleetProfile | null;
   code: string;
   name: string;
   type: CraneType;
@@ -34,12 +38,12 @@ export interface Crane {
   serial_number: string | null;
   vin: string | null;
   plates: string | null;
-  capacity_tons: number;
+  capacity_tons: number | null;
   boom_length_m: number | null;
-  hour_meter: number;
+  hour_meter: number | null;
   odometer_km: number | null;
-  service_interval_hours: number;
-  last_service_hours: number;
+  service_interval_hours: number | null;
+  last_service_hours: number | null;
   base_location: string | null;
   daily_rate: number | null;
   notes: string | null;
@@ -119,6 +123,8 @@ export interface Rental {
 
 export interface MaintenanceOrder {
   id: string;
+  plan_id?: string | null;
+  checklist_version?: string | null;
   crane_id: string;
   kind: "preventivo" | "correctivo";
   title: string;
@@ -156,7 +162,7 @@ export interface Downtime {
   created_at: string;
 }
 
-export type ChecklistKind = "revision_total" | "pre_renta" | "post_renta" | "diaria";
+export type ChecklistKind = "revision_total" | "pre_renta" | "post_renta" | "diaria" | "mantenimiento";
 export type ResponseType = "ok_falla" | "numero" | "texto";
 
 export interface ChecklistTemplate {
@@ -211,6 +217,7 @@ export type InspectionResult = "aprobada" | "con_observaciones" | "rechazada";
 
 export interface Inspection {
   id: string;
+  maintenance_order_id?: string | null;
   crane_id: string;
   rental_id: string | null;
   template_id: string | null;
@@ -237,6 +244,13 @@ export interface Inspection {
 
 export interface InspectionItem {
   id: string;
+  procedure_steps?: string[];
+  photo_requirements?: string[];
+  reference_label?: string | null;
+  reference_url?: string | null;
+  requires_manual_confirmation?: boolean;
+  manual_confirmed?: boolean;
+  photo_slots?: number[];
   inspection_id: string;
   position: number;
   section: string;

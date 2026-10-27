@@ -1,5 +1,7 @@
 import type { Db } from "@/lib/db/types";
-import type { ChecklistKind, Crane, Inspection, InspectionItem, Rental } from "@/lib/types";
+import { createHash } from "node:crypto";
+import type { ChecklistKind, ChecklistTemplate, Crane, Inspection, InspectionItem, Rental } from "@/lib/types";
+import { getFleetTemplateId } from "@/lib/fleet/payload";
 import {
   MAX_PHOTOS_PER_ITEM,
   composeInspectionItems,
@@ -11,8 +13,21 @@ import {
 import { CHECKLIST_KIND_LABELS } from "@/lib/labels";
 import { addDays, fmt } from "@/lib/time";
 import { inspectionLink, raiseAlert, sendToStaff } from "./notify";
+import { assertMaintenanceEvidence } from "@/lib/domain/maintenance-checklists";
 
 const RECENT_DAYS = 45;
+
+export function selectInspectionTemplate(templates: ChecklistTemplate[], crane: Crane, kind: ChecklistKind): ChecklistTemplate | undefined {
+  const active = templates.filter((t) => t.active);
+  if (crane.fleet_profile?.import_key.startsWith("sergio-2026-10-27:")) {
+    const preferredId = getFleetTemplateId(crane.type, kind);
+    const preferred = active.find((t) => t.id === preferredId && t.kind === kind && t.crane_types.includes(crane.type));
+    if (preferred) return preferred;
+  }
+  const wantedKind = kind === "post_renta" ? "post_renta" : kind === "diaria" ? "diaria" : "revision_total";
+  return active.find((t) => t.kind === wantedKind && t.crane_types.includes(crane.type)) ??
+    active.find((t) => t.kind === "revision_total" && t.crane_types.includes(crane.type));
+}
 
 /**
  * Programa una revisión personalizada para la grúa: plantilla por tipo +
@@ -34,14 +49,13 @@ export async function scheduleInspection(
   },
   now: Date,
 ): Promise<{ inspection: Inspection; items: number; focus: FocusItem[] }> {
+  if (input.kind === "mantenimiento") throw new Error("Programa el checklist desde el plan de mantenimiento de la unidad.");
   const crane = await db.get("cranes", input.craneId);
   if (!crane) throw new Error("Grúa no encontrada");
 
   const templates = await db.select("checklist_templates", { eq: { active: true } });
   const wantedKind = input.kind === "post_renta" ? "post_renta" : input.kind === "diaria" ? "diaria" : "revision_total";
-  const template =
-    templates.find((t) => t.kind === wantedKind && t.crane_types.includes(crane.type)) ??
-    templates.find((t) => t.kind === "revision_total" && t.crane_types.includes(crane.type));
+  const template = selectInspectionTemplate(templates, crane, input.kind);
   if (!template) throw new Error(`No hay plantilla de ${wantedKind} para ${crane.type}`);
 
   const [templateItems, craneItems] = await Promise.all([
@@ -147,7 +161,11 @@ export async function startInspection(
 ) {
   const data = await getInspectionByToken(db, token);
   if (!data) throw new Error("Revisión no encontrada");
-  if (data.inspection.status === "completada" || data.inspection.status === "cancelada") return data.inspection;
+  await assertInspectionWritable(db, data.inspection);
+  if (data.inspection.maintenance_order_id) {
+    const order = await db.get("maintenance_orders", data.inspection.maintenance_order_id);
+    if (order?.status === "programado") await db.update("maintenance_orders", order.id, { status: "en_proceso" });
+  }
   if (data.inspection.started_at) return data.inspection;
   return db.update("inspections", data.inspection.id, {
     status: "en_progreso",
@@ -165,6 +183,21 @@ export interface PhotoRef {
   path: string;
   hash: string;
   takenAt: string | null;
+  slot?: number;
+}
+
+async function assertInspectionWritable(db: Db, inspection: Inspection) {
+  if (["completada", "cancelada"].includes(inspection.status)) throw new Error("La revisión está cerrada o cancelada.");
+  if (inspection.maintenance_order_id) {
+    const order = await db.get("maintenance_orders", inspection.maintenance_order_id);
+    if (!order || ["completado", "cancelado"].includes(order.status)) throw new Error("La orden de mantenimiento está cerrada o cancelada.");
+  }
+}
+
+function assertMaintenanceSequence(inspection: Inspection, items: InspectionItem[], item: InspectionItem) {
+  if (inspection.kind !== "mantenimiento") return;
+  if (!inspection.started_at) throw new Error("Inicia el checklist antes de registrar evidencia.");
+  if (items.some((i) => i.position < item.position && (!i.answered_at || (i.requires_manual_confirmation && !i.manual_confirmed)))) throw new Error("Completa los pasos anteriores y confirma el manual antes de continuar.");
 }
 
 /**
@@ -180,16 +213,22 @@ export async function uploadItemPhoto(
 ): Promise<PhotoRef> {
   const data = await getInspectionByToken(db, token);
   if (!data) throw new Error("Revisión no encontrada");
-  if (data.inspection.status === "completada") throw new Error("La revisión ya fue cerrada");
+  await assertInspectionWritable(db, data.inspection);
   const item = data.items.find((i) => i.id === itemId);
   if (!item) throw new Error("Punto no encontrado");
+  assertMaintenanceSequence(data.inspection, data.items, item);
   if (!HASH_RE.test(file.hash)) throw new Error("Foto inválida, tómala de nuevo.");
+  const serverHash = createHash("sha256").update(file.bytes).digest("hex");
+  if (serverHash !== file.hash) throw new Error("La foto no coincide con el archivo recibido; tómala de nuevo.");
+  const jpeg = file.bytes[0] === 255 && file.bytes[1] === 216 && file.bytes[2] === 255;
+  const png = file.bytes[0] === 137 && file.bytes[1] === 80 && file.bytes[2] === 78 && file.bytes[3] === 71;
+  if ((!jpeg && !png) || file.bytes.length > 4_000_000) throw new Error("Envía una fotografía JPG o PNG de hasta 4 MB.");
   if (data.items.some((i) => i.id !== itemId && i.photo_hashes.includes(file.hash))) {
     throw new Error("Esta foto ya se usó en otro punto. Toma una foto nueva de este punto.");
   }
-  const ext = file.contentType.includes("png") ? "png" : "jpg";
+  const ext = png ? "png" : "jpg";
   const path = `${data.inspection.id}/${itemId}-${Date.now()}-${file.hash.slice(0, 8)}.${ext}`;
-  await db.upload("evidencias", path, { bytes: file.bytes, contentType: file.contentType || "image/jpeg" });
+  await db.upload("evidencias", path, { bytes: file.bytes, contentType: png ? "image/png" : "image/jpeg" });
   return { path, hash: file.hash, takenAt: file.takenAt };
 }
 
@@ -205,13 +244,16 @@ export async function answerItem(
     shownAt: string;
     /** Lista final de fotos del punto (las ya guardadas que se conservan + las nuevas). */
     photos: PhotoRef[];
+    manualConfirmed?: boolean;
   },
 ) {
   const data = await getInspectionByToken(db, token);
   if (!data) throw new Error("Revisión no encontrada");
-  if (data.inspection.status === "completada") throw new Error("La revisión ya fue cerrada");
+  await assertInspectionWritable(db, data.inspection);
   const item = data.items.find((i) => i.id === itemId);
   if (!item) throw new Error("Punto no encontrado");
+  assertMaintenanceSequence(data.inspection, data.items, item);
+  if (item.requires_manual_confirmation && input.manualConfirmed !== true) throw new Error("Confirma que tienes el manual correcto para esta unidad antes de continuar.");
 
   const now = Date.now();
   const flags = new Set<string>();
@@ -222,7 +264,7 @@ export async function answerItem(
   const saved = new Map(item.photo_paths.map((p, i) => [p, item.photo_hashes[i]]));
   const photos = input.photos.map((p) => {
     if (saved.has(p.path)) return { ...p, hash: saved.get(p.path)!, isNew: false };
-    if (!p.path.startsWith(`${data.inspection.id}/`) || !HASH_RE.test(p.hash)) throw new Error("Foto inválida, tómala de nuevo.");
+    if (!p.path.startsWith(`${data.inspection.id}/${item.id}-`) || !HASH_RE.test(p.hash)) throw new Error("Foto inválida, tómala de nuevo.");
     return { ...p, isNew: true };
   });
   if (photos.length > MAX_PHOTOS_PER_ITEM) throw new Error(`Máximo ${MAX_PHOTOS_PER_ITEM} fotos por punto.`);
@@ -230,6 +272,19 @@ export async function answerItem(
   if (photos.length < needed) {
     throw new Error(needed === 1 ? "Este punto requiere foto" : `Este punto requiere ${needed} fotos (llevas ${photos.length}).`);
   }
+  if (data.inspection.kind === "mantenimiento") {
+    const slots = photos.map((p) => p.slot);
+    if (slots.some((s) => !Number.isInteger(s) || s! < 0 || s! >= MAX_PHOTOS_PER_ITEM) || new Set(slots).size !== photos.length || Array.from({ length: needed }, (_, k) => k).some((slot) => !slots.includes(slot))) throw new Error("Completa cada toma indicada con su propia fotografía.");
+    for (const p of photos.filter((p) => !p.isNew)) {
+      const oldIndex = item.photo_paths.indexOf(p.path);
+      if (item.photo_slots?.[oldIndex] !== p.slot) throw new Error("La fotografía debe conservar la toma para la que se registró.");
+    }
+  }
+  // A path and hash supplied by the browser are not evidence until storage confirms the bytes.
+  await Promise.all(photos.filter((p) => p.isNew).map(async (p) => {
+    const file = await db.download("evidencias", p.path);
+    if (!file || createHash("sha256").update(file.bytes).digest("hex") !== p.hash) throw new Error("No se pudo verificar la fotografía guardada. Vuelve a subirla.");
+  }));
   const hashes = photos.map((p) => p.hash);
   if (new Set(hashes).size !== hashes.length) throw new Error("Repetiste la misma foto en este punto. Toma una diferente.");
   if (data.items.some((i) => i.id !== itemId && i.photo_hashes.some((h) => hashes.includes(h)))) {
@@ -246,9 +301,10 @@ export async function answerItem(
   if (keptAll) for (const f of item.flags) if (f === "foto_duplicada" || f === "foto_antigua" || f === "foto_no_coincide") flags.add(f);
 
   if (item.response_type === "ok_falla" && input.passed === null) throw new Error("Indica si el punto está OK o tiene falla");
-  if (item.response_type === "numero" && (input.valueNumber == null || Number.isNaN(input.valueNumber))) {
+  if (item.response_type === "numero" && (input.valueNumber == null || !Number.isFinite(input.valueNumber))) {
     throw new Error("Escribe la lectura");
   }
+  if (item.response_type === "texto" && !input.valueText?.trim()) throw new Error("Completa la información solicitada en este paso.");
   let passed = input.passed;
   if (item.response_type === "numero") {
     const out =
@@ -268,6 +324,8 @@ export async function answerItem(
     notes: input.notes?.trim() || null,
     photo_paths: photos.map((p) => p.path),
     photo_hashes: hashes,
+    photo_slots: photos.map((p, index) => p.slot ?? index),
+    manual_confirmed: item.requires_manual_confirmation ? input.manualConfirmed === true : false,
     photo_taken_at: takenTimes[0] ?? item.photo_taken_at,
     shown_at: input.shownAt,
     answered_at: new Date(now).toISOString(),
@@ -292,7 +350,11 @@ export async function completeInspection(db: Db, token: string, input: { signatu
   if (!data) throw new Error("Revisión no encontrada");
   const { inspection, crane } = data;
   if (inspection.status === "completada") return inspection;
+  await assertInspectionWritable(db, inspection);
   const items = data.items;
+  if (!items.length) throw new Error("La revisión no tiene pasos; no se puede aprobar.");
+  if (inspection.kind === "mantenimiento") assertMaintenanceEvidence(items);
+  if (input.hourMeter != null && (!Number.isFinite(input.hourMeter) || input.hourMeter < 0)) throw new Error("Lectura de horómetro inválida.");
   const pending = items.filter((i) => !i.answered_at);
   if (pending.length) throw new Error(`Faltan ${pending.length} puntos por contestar`);
   if (input.signatureName.trim().length < 5) throw new Error("Escribe tu nombre completo para firmar");
@@ -311,7 +373,7 @@ export async function completeInspection(db: Db, token: string, input: { signatu
     hour_meter_reading: hourMeter,
     ai_summary: summarize(items, result, score),
   });
-  if (hourMeter && hourMeter > crane.hour_meter) await db.update("cranes", crane.id, { hour_meter: hourMeter });
+  if (hourMeter != null && (crane.hour_meter == null || hourMeter > crane.hour_meter)) await db.update("cranes", crane.id, { hour_meter: hourMeter });
 
   await afterCompletion(db, updated, items, crane);
   return updated;

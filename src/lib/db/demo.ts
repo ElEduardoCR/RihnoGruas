@@ -1,5 +1,6 @@
 import type { TableName, Tables } from "@/lib/types";
 import { buildSeed, type SeedData } from "@/lib/demo/seed";
+import { buildFleetPreview } from "@/lib/fleet/preview";
 import type { Bucket, Db, Query, Scalar, StoredFile } from "./types";
 
 // Almacén en memoria compartido por todo el proceso (server components,
@@ -12,7 +13,7 @@ interface DemoState {
 const g = globalThis as unknown as { __rhinoDemo?: DemoState };
 
 function state(): DemoState {
-  if (!g.__rhinoDemo) g.__rhinoDemo = { tables: buildSeed(new Date()), files: new Map() };
+  if (!g.__rhinoDemo) g.__rhinoDemo = { tables: process.env.FLEET_PREVIEW === "1" ? buildFleetPreview(new Date()) : buildSeed(new Date()), files: new Map() };
   return g.__rhinoDemo;
 }
 
@@ -78,6 +79,23 @@ export function demoDb(): Db {
 
   return {
     mode: "demo",
+
+    async createMaintenanceBundle(bundle) {
+      const order = withDefaults("maintenance_orders", bundle.order);
+      const inspection = withDefaults("inspections", bundle.inspection);
+      const items = bundle.items.map((i) => withDefaults("inspection_items", i));
+      if (!order.id || inspection.maintenance_order_id !== order.id || items.some((i) => i.inspection_id !== inspection.id)) throw new Error("El checklist no corresponde a esta orden.");
+      if (bundle.repeat) {
+        if (!s.tables.maintenance_orders.some((m) => m.id === order.id && ["programado", "en_proceso"].includes(m.status))) throw new Error("La orden no está abierta.");
+        if (s.tables.inspections.some((i) => i.maintenance_order_id === order.id && !["completada", "cancelada"].includes(i.status))) throw new Error("Ya hay un checklist pendiente.");
+      } else {
+        if (s.tables.maintenance_orders.some((m) => m.crane_id === order.crane_id && m.plan_id === order.plan_id && ["programado", "en_proceso"].includes(m.status))) throw new Error("Ya existe una orden abierta para este plan.");
+        s.tables.maintenance_orders.push(order);
+      }
+      s.tables.inspections.push(inspection);
+      s.tables.inspection_items.push(...items);
+      return clone(order);
+    },
 
     async select(table, q) {
       let out = rows(table).filter((r) => matches(r as unknown as Record<string, unknown>, q));

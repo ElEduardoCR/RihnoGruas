@@ -1,6 +1,7 @@
 import type { Db } from "@/lib/db/types";
 import type { AlertTopic, Client, Crane, CraneType, InventoryCategory, InventoryItem, Staff, StaffRole } from "@/lib/types";
 import { norm } from "@/lib/text";
+import { CRANE_TYPES } from "@/lib/types";
 
 // Altas y ediciones de catálogos: grúas, clientes, personal y artículos de almacén.
 
@@ -15,7 +16,7 @@ export function assertManager(staff: Staff | null) {
 }
 
 const nonNeg = (v: number | null, label: string) => {
-  if (v != null && (Number.isNaN(v) || v < 0)) throw new CatalogError(`${label}: valor inválido.`);
+  if (v != null && (!Number.isFinite(v) || v < 0)) throw new CatalogError(`${label}: valor inválido.`);
   return v;
 };
 
@@ -60,12 +61,15 @@ export interface CraneInput {
 export async function saveCrane(db: Db, input: CraneInput, id?: string | null): Promise<Crane> {
   const code = input.code.trim().toUpperCase().replace(/\s+/g, "-");
   if (!code) throw new CatalogError("Indica el número económico.");
-  if (!input.name.trim()) throw new CatalogError("Indica el nombre de la grúa.");
+  if (!input.name.trim()) throw new CatalogError("Indica el nombre de la unidad.");
   if (!input.brand.trim() || !input.model.trim()) throw new CatalogError("Indica marca y modelo.");
-  if (!(input.capacity_tons && input.capacity_tons > 0)) throw new CatalogError("Indica la capacidad en toneladas.");
+  if (!CRANE_TYPES.includes(input.type)) throw new CatalogError("Selecciona un tipo de unidad válido.");
+  if (input.capacity_tons != null && (!Number.isFinite(input.capacity_tons) || input.capacity_tons <= 0)) throw new CatalogError("La capacidad debe ser positiva o quedar pendiente.");
+  if (input.service_interval_hours != null && (!Number.isFinite(input.service_interval_hours) || input.service_interval_hours <= 0)) throw new CatalogError("El intervalo de servicio debe ser positivo o quedar pendiente.");
+  if (input.hour_meter != null && input.last_service_hours != null && input.last_service_hours > input.hour_meter) throw new CatalogError("El último servicio no puede superar el horómetro actual.");
   if (input.year != null && (input.year < 1950 || input.year > 2100)) throw new CatalogError("Año inválido.");
   const dup = (await db.select("cranes", { eq: { code } })).find((c) => c.id !== id);
-  if (dup) throw new CatalogError(`Ya existe una grúa con el número económico ${code}.`);
+  if (dup) throw new CatalogError(`Ya existe una unidad con el número económico ${code}.`);
 
   const row: Partial<Crane> = {
     code,
@@ -79,10 +83,10 @@ export async function saveCrane(db: Db, input: CraneInput, id?: string | null): 
     serial_number: input.serial_number,
     vin: input.vin,
     plates: input.plates?.toUpperCase() ?? null,
-    hour_meter: nonNeg(input.hour_meter, "Horómetro") ?? 0,
+    hour_meter: nonNeg(input.hour_meter, "Horómetro"),
     odometer_km: nonNeg(input.odometer_km, "Odómetro"),
-    service_interval_hours: nonNeg(input.service_interval_hours, "Intervalo de servicio") || (input.type === "grua_armable" ? 500 : 250),
-    last_service_hours: nonNeg(input.last_service_hours, "Último servicio") ?? nonNeg(input.hour_meter, "Horómetro") ?? 0,
+    service_interval_hours: nonNeg(input.service_interval_hours, "Intervalo de servicio"),
+    last_service_hours: nonNeg(input.last_service_hours, "Último servicio"),
     base_location: input.base_location,
     daily_rate: nonNeg(input.daily_rate, "Tarifa"),
     acquired_on: input.acquired_on,

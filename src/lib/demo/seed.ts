@@ -195,8 +195,8 @@ export function buildSeed(now: Date): SeedData {
   for (const c of cranes) {
     doc(c, "seguro", "Póliza de responsabilidad civil y daños", insExp[c.code], {
       number: `PL-${Math.floor(between(1e6, 9e6))}`,
-      issuer: c.capacity_tons > 50 ? "Seguros Atlas" : "GNP Seguros",
-      coverage: `RC $${c.capacity_tons > 50 ? "10" : "5"} MDP · daños materiales · robo total`,
+      issuer: (c.capacity_tons ?? 0) > 50 ? "Seguros Atlas" : "GNP Seguros",
+      coverage: `RC $${(c.capacity_tons ?? 0) > 50 ? "10" : "5"} MDP · daños materiales · robo total`,
       amount: Math.round(between(48000, 120000)),
     });
     doc(c, "certificacion_carga", "Certificación anual de grúa", certExp[c.code], {
@@ -282,7 +282,7 @@ export function buildSeed(now: Date): SeedData {
   const mo = (c: Crane, kind: MaintenanceOrder["kind"], title: string, s: string, e: string, status: MaintenanceOrder["status"], cost: number, extra: Partial<MaintenanceOrder> = {}) => {
     const m: MaintenanceOrder = {
       id: uid(), crane_id: c.id, kind, title, description: null, scheduled_start: s, scheduled_end: e, status,
-      mechanic_id: mecanico.id, cost, hour_meter_at: c.hour_meter - (status === "completado" ? 120 : 0), created_by: "web",
+      mechanic_id: mecanico.id, cost, hour_meter_at: (c.hour_meter ?? 0) - (status === "completado" ? 120 : 0), created_by: "web",
       completed_at: status === "completado" ? e : null, created_at: at(-60), ...extra,
     };
     maint.push(m);
@@ -375,7 +375,7 @@ export function buildSeed(now: Date): SeedData {
         it.photo_taken_at = it.answered_at;
         const fail = opts.answer!.failTitles?.[it.title];
         if (it.response_type === "numero") {
-          it.value_number = it.unit === "%" ? 62 : it.unit === "mm" ? 15.6 : opts.c.hour_meter - 6;
+          it.value_number = it.unit === "%" ? 62 : it.unit === "mm" ? 15.6 : (opts.c.hour_meter ?? 0) - 6;
           it.passed = true;
         } else if (it.response_type === "texto") {
           it.value_text = "Revisado, configuración correcta.";
@@ -394,7 +394,7 @@ export function buildSeed(now: Date): SeedData {
       insp.result = inspectionResult(rows);
       insp.quality_score = score;
       insp.quality_flags = flags;
-      insp.hour_meter_reading = opts.c.hour_meter - 6;
+      insp.hour_meter_reading = (opts.c.hour_meter ?? 0) - 6;
       insp.signature_name = opts.who.full_name;
     }
     inspections.push(insp);

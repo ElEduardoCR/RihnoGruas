@@ -8,14 +8,16 @@ import { CRANE_TYPE_LABELS, STATUS_LABELS } from "@/lib/labels";
 import type { CraneStatus, CraneType } from "@/lib/types";
 import { fmt, num } from "@/lib/time";
 import { Badge, Card, DocHealthBadge, PageHeader, PageSkeleton, Progress, StatusPill, cx } from "@/components/ui";
-import { CraneArt, CraneIcon } from "@/components/brand";
+import { CraneIcon } from "@/components/brand";
+import { FleetPhoto } from "@/components/fleet-profile";
+import { FLEET_RECONCILIATION } from "@/lib/fleet/sergio";
 import { Modal } from "@/components/modal";
 import { CraneForm } from "@/components/catalog-forms";
 import { Plus } from "lucide-react";
 import { currentStaff } from "@/lib/auth";
 import { MANAGER_ROLES } from "@/lib/services/catalogs";
 
-export const metadata = { title: "Grúas" };
+export const metadata = { title: "Flota y equipos" };
 
 type SP = Promise<{ tipo?: string; estado?: string }>;
 
@@ -34,6 +36,7 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
   const now = new Date();
   const [{ cranes }, me] = await Promise.all([getFleet(db, now), currentStaff(db)]);
   const canEdit = Boolean(me && MANAGER_ROLES.includes(me.role));
+  const hasSergioFleet = cranes.some((c) => c.fleet_profile?.import_key.startsWith("sergio-2026-10-27:"));
   const tipo = sp.tipo as CraneType | undefined;
   const estado = sp.estado as CraneStatus | undefined;
   const list = cranes.filter((c) => (!tipo || c.type === tipo) && (!estado || c.status === estado));
@@ -51,21 +54,33 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
   return (
     <>
       <PageHeader
-        title="Grúas"
-        subtitle={`${cranes.length} unidades · grúas móviles, Titanes y armables en sitio. Toca una para ver su expediente completo.`}
+        title="Flota y equipos"
+        subtitle={`${cranes.length} unidades registradas · grúas, equipos de carga, transporte y vehículos de apoyo. Abre una para consultar su expediente y mantenimiento.`}
         actions={
           canEdit && (
-            <Modal label="Nueva grúa" title="Nueva grúa" icon={<Plus className="size-4" />} wide>
+            <Modal label="Nueva unidad" title="Nueva unidad" icon={<Plus className="size-4" />} wide>
               <CraneForm />
             </Modal>
           )
         }
       />
+      {hasSergioFleet && (
+        <Card className="mb-6 border-warn-mid/20 bg-warn-soft/40 p-5 sm:p-6">
+          <div className="flex flex-wrap items-center gap-2">
+            <h2 className="text-[15px] font-semibold">Conciliación del listado de Sergio</h2>
+            <Badge tone="amber">Identidades por confirmar</Badge>
+          </div>
+          <p className="mt-2 text-[13px] leading-relaxed text-ink-2">Las menciones pendientes se conservan aquí y no se cuentan como unidades adicionales.</p>
+          <ul className="mt-3 list-disc space-y-2 pl-4 text-[13px] leading-relaxed text-ink-2">
+            {FLEET_RECONCILIATION.map((item) => <li key={item}>{item}</li>)}
+          </ul>
+        </Card>
+      )}
       {cranes.length === 0 && (
         <Card className="p-10 text-center" as="div">
           <CraneIcon className="mx-auto size-10 text-faint" />
-          <div className="mt-3 text-[17px] font-semibold">Aún no hay grúas</div>
-          <p className="mx-auto mt-1 max-w-md text-[14px] text-muted">Da de alta la primera con “Nueva grúa”. Después carga sus documentos y aprueba a sus operadores desde su expediente.</p>
+          <div className="mt-3 text-[17px] font-semibold">Aún no hay unidades</div>
+          <p className="mx-auto mt-1 max-w-md text-[14px] text-muted">Da de alta la primera con “Nueva unidad”. Después completa sus documentos y responsables desde el expediente.</p>
         </Card>
       )}
       <div className="mb-6 flex flex-wrap gap-2">
@@ -87,8 +102,8 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
         {list.map((c) => (
           <Link key={c.id} href={`/gruas/${c.id}`} className="group">
             <Card className="h-full overflow-hidden transition group-hover:-translate-y-0.5 group-hover:shadow-[var(--shadow-pop)]" as="article">
-              <div className={cx("relative h-[150px] px-6 pt-6", c.status === "rentada" ? "bg-night" : "bg-gradient-to-b from-canvas to-white")}>
-                <CraneArt type={c.type} tone={c.status === "rentada" ? "dark" : "light"} />
+              <div className={cx("relative h-[200px] px-5 pt-12 pb-2", c.status === "rentada" ? "bg-night" : "bg-gradient-to-b from-canvas to-white")}>
+                <FleetPhoto profile={c.fleet_profile} type={c.type} tone={c.status === "rentada" ? "dark" : "light"} compact />
                 <div className="absolute top-4 left-4 flex gap-2">
                   <span className={cx("rounded-full px-2.5 py-1 text-[12px] font-semibold", c.status === "rentada" ? "bg-white/10 text-white" : "bg-white text-ink shadow-sm")}>{c.code}</span>
                 </div>
@@ -99,26 +114,33 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
               <div className="p-5">
                 <div className="flex items-start justify-between gap-3">
                   <div className="min-w-0">
-                    <h3 className="truncate text-[18px] font-semibold">{c.name}</h3>
+                    <h3 className="text-[18px] leading-snug font-semibold">{c.name}</h3>
                     <p className="truncate text-[13px] text-muted">
                       {CRANE_TYPE_LABELS[c.type]} · {c.brand} {c.model}
                     </p>
                   </div>
-                  <DocHealthBadge health={c.docHealth} days={null} />
+                  {c.documents.length === 0 ? <Badge tone="neutral">Sin documentos</Badge> : <DocHealthBadge health={c.docHealth} days={null} />}
                 </div>
+                {c.fleet_profile && <div className="mt-2"><Badge tone="amber">Identificación pendiente</Badge></div>}
                 <div className="mt-4 grid grid-cols-3 gap-2 text-[12px] text-muted">
-                  <span className="flex items-center gap-1.5"><Weight className="size-3.5" /><b className="text-ink">{num(c.capacity_tons)}</b> t</span>
-                  <span className="flex items-center gap-1.5"><Ruler className="size-3.5" /><b className="text-ink">{c.boom_length_m ?? "—"}</b> m</span>
-                  <span className="flex items-center gap-1.5"><Gauge className="size-3.5" /><b className="text-ink">{num(c.hour_meter)}</b> h</span>
+                  <span className="flex items-center gap-1.5" title="Capacidad verificada"><Weight className="size-3.5 shrink-0" /><span className="sr-only">Capacidad verificada: </span><b className="text-ink">{c.capacity_tons == null ? "—" : `${num(c.capacity_tons)} t`}</b></span>
+                  <span className="flex items-center gap-1.5" title="Longitud de pluma verificada"><Ruler className="size-3.5 shrink-0" /><span className="sr-only">Pluma: </span><b className="text-ink">{c.boom_length_m == null ? "—" : `${num(c.boom_length_m)} m`}</b></span>
+                  <span className="flex items-center gap-1.5" title="Lectura del horómetro"><Gauge className="size-3.5 shrink-0" /><span className="sr-only">Horómetro: </span><b className="text-ink">{c.hour_meter == null ? "—" : `${num(c.hour_meter)} h`}</b></span>
                 </div>
                 <div className="mt-4">
-                  <div className="mb-1.5 flex justify-between text-[12px]">
-                    <span className="text-muted">Servicio</span>
-                    <span className={cx("font-medium", c.service.pct >= 0.9 ? "text-rhino-600" : "text-ink-2")}>
-                      {Math.round(c.service.used)} / {c.service_interval_hours} h
-                    </span>
-                  </div>
-                  <Progress value={c.service.pct} tone={c.service.pct >= 1 ? "red" : c.service.pct >= 0.85 ? "amber" : "dark"} />
+                  {c.service.known ? (
+                    <>
+                      <div className="mb-1.5 flex justify-between text-[12px]">
+                        <span className="text-muted">Servicio</span>
+                        <span className={cx("font-medium", c.service.pct >= 0.9 ? "text-rhino-600" : "text-ink-2")}>
+                          {Math.round(c.service.used)} / {c.service_interval_hours} h
+                        </span>
+                      </div>
+                      <Progress value={c.service.pct} tone={c.service.pct >= 1 ? "red" : c.service.pct >= 0.85 ? "amber" : "dark"} />
+                    </>
+                  ) : (
+                    <p className="rounded-xl bg-canvas px-3 py-2 text-[12px] text-muted">Servicio · Pendiente de lecturas y manual</p>
+                  )}
                 </div>
                 <div className="mt-4 border-t border-line pt-3 text-[13px]">
                   {c.current ? (
@@ -141,12 +163,13 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
       </div>
       {list.length === 0 && cranes.length > 0 && (
         <Card className="p-10 text-center text-muted">
-          Ninguna grúa con esos filtros. <Link href="/gruas" className="font-medium text-rhino-600">Quitar filtros</Link>
+          Ninguna unidad con esos filtros. <Link href="/gruas" className="font-medium text-rhino-600">Quitar filtros</Link>
         </Card>
       )}
-      <p className="mt-6 text-[12px] text-muted">
-        Salud documental: <Badge tone="green">Vigente</Badge> todo en regla · <Badge tone="amber">Por vencer</Badge> algo vence en ≤ 30 días · <Badge tone="red">Vencido</Badge> no puede salir a renta.
-      </p>
+      <div className="mt-6 space-y-3 rounded-2xl border border-line bg-white p-4 text-[12px] leading-relaxed text-muted">
+        <p><span className="font-medium text-ink">Disponible describe la agenda.</span> La identificación, la capacidad aplicable y los documentos deben verificarse antes de asignar una unidad a un trabajo.</p>
+        <p>Documentos registrados: <Badge tone="green">Vigente</Badge> sin vencimientos · <Badge tone="amber">Por vencer</Badge> vence en ≤ 30 días · <Badge tone="red">Vencido</Badge> impide rentar · <Badge tone="neutral">Sin documentos</Badge> expediente pendiente.</p>
+      </div>
     </>
   );
 }

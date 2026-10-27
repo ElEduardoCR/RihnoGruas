@@ -1,4 +1,4 @@
-import type { TableName, Tables } from "@/lib/types";
+import type { TableName, Tables, MaintenanceOrder, Inspection, InspectionItem } from "@/lib/types";
 
 export type Scalar = string | number | boolean | null;
 
@@ -33,6 +33,15 @@ export interface Db {
   remove<T extends TableName>(table: T, id: string): Promise<void>;
   upload(bucket: Bucket, path: string, file: StoredFile): Promise<void>;
   download(bucket: Bucket, path: string): Promise<StoredFile | null>;
+  /** Creates the order, its checklist and frozen steps in one transaction. */
+  createMaintenanceBundle?(bundle: MaintenanceBundle): Promise<MaintenanceOrder>;
+}
+
+export interface MaintenanceBundle {
+  repeat?: boolean;
+  order: Partial<MaintenanceOrder>;
+  inspection: Partial<Inspection>;
+  items: Partial<InspectionItem>[];
 }
 
 export type Bucket = "evidencias" | "documentos";

@@ -8,6 +8,7 @@ import type {
   MaintenanceOrder,
   Rental,
 } from "@/lib/types";
+import { serviceUsage } from "./fleet";
 import { DOC_LABELS } from "@/lib/labels";
 import { daysUntil, fmt } from "@/lib/time";
 
@@ -90,12 +91,12 @@ export function deriveFocusItems(input: {
     });
   }
 
-  const used = crane.hour_meter - crane.last_service_hours;
-  if (used >= crane.service_interval_hours * 0.85) {
+  const service = serviceUsage(crane);
+  if (service.known && service.pct >= 0.85 && crane.hour_meter != null) {
     out.push({
       section: "Servicio",
       title: "Servicio preventivo próximo",
-      instructions: `Horómetro ${Math.round(crane.hour_meter)} h · ${Math.round(used)} de ${crane.service_interval_hours} h desde el último servicio. Revisa niveles, filtros y engrase con especial cuidado.`,
+      instructions: `Horómetro ${Math.round(crane.hour_meter)} h · ${Math.round(service.used)} de ${crane.service_interval_hours} h desde el último servicio. Revisa niveles, filtros y engrase con especial cuidado.`,
       reason: "Horas de uso cerca del intervalo de servicio",
       photo_hint: "Foto de filtros y niveles",
     });

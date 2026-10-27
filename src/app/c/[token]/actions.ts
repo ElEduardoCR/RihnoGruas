@@ -35,7 +35,7 @@ export async function uploadPhotoAction(token: string, itemId: string, fd: FormD
 export async function saveStepAction(
   token: string,
   itemId: string,
-  input: { passed: boolean | null; value: string; notes: string; shownAt: string; photos: PhotoRef[] },
+  input: { passed: boolean | null; value: string; notes: string; shownAt: string; photos: PhotoRef[]; manualConfirmed?: boolean },
 ): Promise<{ ok: true; item: WizardItem } | { ok: false; error: string }> {
   try {
     const value = input.value.trim();
@@ -46,6 +46,7 @@ export async function saveStepAction(
       notes: input.notes || null,
       shownAt: input.shownAt,
       photos: input.photos,
+      manualConfirmed: input.manualConfirmed,
     });
     return { ok: true, item: toWizardItem(item) };
   } catch (e) {

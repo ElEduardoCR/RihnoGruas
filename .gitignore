@@ -15,6 +15,7 @@
 
 # next.js
 /.next/
+/.next-fleet-preview/
 /out/
 
 # production

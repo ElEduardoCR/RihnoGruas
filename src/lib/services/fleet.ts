@@ -61,24 +61,38 @@ export async function getStaffMap(db: Db) {
   return new Map<string, Staff>(staff.map((s) => [s.id, s]));
 }
 
-/** Busca una grúa por número económico, nombre o id (tolerante a "rh4", "RH 04", "grove"). */
+/** Resuelve sólo coincidencias únicas; un código explícito nunca cae en búsqueda difusa. */
 export async function findCrane(db: Db, query: string): Promise<Crane | null> {
   const cranes = await db.select("cranes", { eq: { active: true } });
   const q = norm(query);
+  if (!q) return null;
+  const unique = (matches: Crane[]) => matches.length === 1 ? matches[0] : null;
   const byId = cranes.find((c) => c.id === query);
   if (byId) return byId;
-  const codeMatch = q.match(/rh[\s-]*0*(\d{1,2})/);
-  if (codeMatch) {
-    const code = `RH-${codeMatch[1].padStart(2, "0")}`;
-    const c = cranes.find((x) => x.code === code);
-    if (c) return c;
+  const compact = (value: string) => norm(value).replace(/[\s-]+/g, "");
+  const exactCode = unique(cranes.filter((c) => compact(c.code) === compact(q)));
+  if (exactCode) return exactCode;
+
+  const codeMatches = [...q.matchAll(/\b(rh|gr|ap)[\s-]*0*(\d+)\b/g)];
+  if (codeMatches.length) {
+    const codes = new Set(codeMatches.map((m) => `${m[1]}-${Number(m[2]).toString().padStart(2, "0")}`));
+    if (codes.size !== 1) return null;
+    const code = [...codes][0];
+    return unique(cranes.filter((c) => norm(c.code) === code));
   }
-  return (
-    cranes.find((c) => norm(c.name) === q) ??
-    cranes.find((c) => norm(`${c.name} ${c.brand} ${c.model}`).includes(q)) ??
-    cranes.find((c) => q.split(/\s+/).some((w) => w.length > 3 && norm(`${c.name} ${c.brand}`).includes(w))) ??
-    null
-  );
+  // 03 puede pertenecer a GR-03 y AP-03: hace falta el prefijo cuando se repite.
+  if (/^\d{1,3}$/.test(q)) {
+    return unique(cranes.filter((c) => {
+      const number = c.code.match(/^(?:RH|GR|AP)-(\d+)$/i)?.[1];
+      return number != null && Number(number) === Number(q);
+    }));
+  }
+  const exactNames = cranes.filter((c) => norm(c.name) === q);
+  if (exactNames.length) return unique(exactNames);
+  const contained = cranes.filter((c) => norm(`${c.name} ${c.brand} ${c.model}`).includes(q));
+  if (contained.length) return unique(contained);
+  const words = q.split(/\s+/).filter((w) => w.length > 3 && !["grua", "unidad", "estado", "quiero"].includes(w));
+  return unique(cranes.filter((c) => words.some((w) => norm(`${c.name} ${c.brand} ${c.model}`).includes(w))));
 }
 
 export async function getCraneDossier(db: Db, id: string, now: Date) {

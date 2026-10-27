@@ -10,7 +10,7 @@ import { cx } from "./ui";
 const NAV = [
   { href: "/", label: "Dashboard", icon: LayoutGrid },
   { href: "/calendario", label: "Calendario", icon: CalendarDays },
-  { href: "/gruas", label: "Grúas", icon: CraneIcon },
+  { href: "/gruas", label: "Flota y equipos", icon: CraneIcon },
   { href: "/inventario", label: "Inventario", icon: Boxes },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
   { href: "/agente", label: "Agente Rhino", icon: MessageCircle },

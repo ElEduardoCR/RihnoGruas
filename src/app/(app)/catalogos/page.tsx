@@ -136,7 +136,7 @@ async function Catalogs({ searchParams }: { searchParams: SP }) {
                           <div className="text-[12px] text-muted">{c.name} · {c.brand} {c.model}</div>
                         </td>
                         <td className={cx(td, "text-ink-2")}>{CRANE_TYPE_LABELS[c.type]}</td>
-                        <td className={cx(td, "tabular text-right")}>{num(c.capacity_tons)} t</td>
+                        <td className={cx(td, "tabular text-right")}>{c.capacity_tons == null ? "Pendiente / no aplica" : `${num(c.capacity_tons)} t`}</td>
                         <td className={cx(td, "font-mono text-[12px] text-muted")}>{c.plates ?? c.serial_number ?? "—"}</td>
                         <td className={cx(td, "tabular text-right")}>{c.daily_rate ? money(c.daily_rate) : "—"}</td>
                         <td className={td}>

@@ -1,6 +1,7 @@
 "use client";
 
 import { useActionState, useEffect, useRef, useState, useTransition } from "react";
+import Link from "next/link";
 import { useCloseModal, FormMessage } from "./modal";
 import { Field, buttonClass, inputClass, selectClass } from "./ui";
 import { compressImage } from "@/lib/client-image";
@@ -13,6 +14,7 @@ import {
   requestIssueAction,
   scheduleInspectionAction,
   scheduleMaintenanceAction,
+  repeatMaintenanceChecklistAction,
   saveDocumentAction,
   type FormState,
 } from "@/app/actions";
@@ -53,7 +55,7 @@ export function useAutoClose(state: FormState, ms = 2600) {
   const close = useCloseModal();
   useEffect(() => {
     // Nunca cerrar solo si el mensaje trae algo que hay que copiar (contraseña temporal)
-    if (state?.ok && !/contraseña temporal/i.test([state.message, ...(state.details ?? [])].join(" "))) {
+    if (state?.ok && !state.checklistUrl && !/contraseña temporal/i.test([state.message, ...(state.details ?? [])].join(" "))) {
       const t = setTimeout(close, ms);
       return () => clearTimeout(t);
     }
@@ -173,12 +175,22 @@ export function InspectionForm({ craneId, staff, defaultWhen }: { craneId: strin
   );
 }
 
-export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: string; mechanics: Opt[]; defaults: { start: string; end: string } }) {
+export function MaintenanceForm({ craneId, mechanics, defaults, planId }: { craneId: string; mechanics: Opt[]; defaults: { start: string; end: string; title?: string; description?: string }; planId?: string }) {
   const { state, pending, form } = useFormAction(scheduleMaintenanceAction, { resetOnSuccess: true });
   useAutoClose(state);
+  if (state?.ok && state.checklistUrl) {
+    return (
+      <div className="space-y-4">
+        <FormMessage state={state} />
+        <Link href={state.checklistUrl} className={buttonClass("primary", "lg") + " w-full"}>Abrir checklist paso a paso</Link>
+      </div>
+    );
+  }
   return (
     <form {...form} className="space-y-4">
       <input type="hidden" name="crane_id" value={craneId} />
+      {planId && <input type="hidden" name="plan_id" value={planId} />}
+      {planId && <p className="rounded-xl bg-canvas p-3 text-[13px] leading-relaxed text-ink-2">La orden incluirá el checklist de este plan, con sus pasos y las fotos que debe tomar el mecánico.</p>}
       <div className="grid grid-cols-2 gap-3">
         <Field label="Tipo">
           <select name="kind" className={selectClass}>
@@ -187,7 +199,8 @@ export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: str
           </select>
         </Field>
         <Field label="Mecánico">
-          <select name="mechanic_id" className={selectClass}>
+          <select name="mechanic_id" className={selectClass} defaultValue="">
+            <option value="">Por asignar</option>
             {mechanics.map((m) => (
               <option key={m.id} value={m.id}>{m.label}</option>
             ))}
@@ -195,7 +208,7 @@ export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: str
         </Field>
       </div>
       <Field label="Trabajo">
-        <input name="title" required className={inputClass} placeholder="Servicio 250 h, cambio de sellos…" />
+        <input name="title" required defaultValue={defaults.title} className={inputClass} placeholder="Servicio según manual, cambio de sellos…" />
       </Field>
       <div className="grid grid-cols-2 gap-3">
         <Field label="Inicio">
@@ -206,10 +219,10 @@ export function MaintenanceForm({ craneId, mechanics, defaults }: { craneId: str
         </Field>
       </div>
       <Field label="Detalle">
-        <textarea name="description" rows={2} className={inputClass + " h-auto py-2.5"} />
+        <textarea name="description" rows={2} defaultValue={defaults.description} className={inputClass + " h-auto py-2.5"} />
       </Field>
       <FormMessage state={state} />
-      <Submit pending={pending}>Programar</Submit>
+      <Submit pending={pending}>{planId ? "Programar con checklist" : "Programar"}</Submit>
     </form>
   );
 }
@@ -225,6 +238,27 @@ export function CompleteMaintenanceForm({ id }: { id: string }) {
       </Field>
       <FormMessage state={state} />
       <Submit pending={pending}>Cerrar orden</Submit>
+    </form>
+  );
+}
+
+export function RepeatMaintenanceChecklistForm({ id }: { id: string }) {
+  const { state, pending, form } = useFormAction(repeatMaintenanceChecklistAction);
+  if (state?.ok && state.checklistUrl) {
+    return (
+      <div className="space-y-4">
+        <FormMessage state={state} />
+        <Link href={state.checklistUrl} className={buttonClass("primary", "lg") + " w-full"}>Abrir nuevo checklist</Link>
+      </div>
+    );
+  }
+  return (
+    <form {...form} className="space-y-4">
+      <input type="hidden" name="id" value={id} />
+      <p className="text-[14px] leading-relaxed text-ink-2">Se abrirá un nuevo checklist para esta orden. La revisión anterior y sus fotografías se conservan en el expediente.</p>
+      <p className="rounded-xl bg-canvas p-3 text-[13px] leading-relaxed text-muted">Vuelve a comprobar los puntos del trabajo y toma evidencia nueva. El cierre depende del resultado de esta nueva revisión.</p>
+      <FormMessage state={state} />
+      <Submit pending={pending}>Crear nuevo checklist</Submit>
     </form>
   );
 }

@@ -28,7 +28,8 @@ export async function proxy(request: NextRequest) {
   if (!data.user) {
     const login = request.nextUrl.clone();
     login.pathname = "/login";
-    login.searchParams.set("next", request.nextUrl.pathname);
+    login.search = "";
+    login.searchParams.set("next", request.nextUrl.pathname + request.nextUrl.search);
     return NextResponse.redirect(login);
   }
   // Con sesión pero sin perfil de personal activo → primer acceso / sin acceso

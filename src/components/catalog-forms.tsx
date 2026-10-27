@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { CRANE_TYPE_LONG } from "@/lib/labels";
 import type { AlertTopic, Client, Crane, InventoryItem, Staff, StaffRole } from "@/lib/types";
 import {
   approveOperatorAction,
@@ -94,9 +95,7 @@ export function CraneForm({ crane }: { crane?: Crane }) {
           </Field>
           <Field label="Tipo">
             <select name="type" value={type} onChange={(e) => setType(e.target.value as Crane["type"])} className={selectClass}>
-              <option value="grua_movil">Grúa móvil</option>
-              <option value="camion_grua">Titán (camión grúa)</option>
-              <option value="grua_armable">Armable en sitio (torre / celosía)</option>
+              {Object.entries(CRANE_TYPE_LONG).map(([value, label]) => <option key={value} value={value}>{label}</option>)}
             </select>
           </Field>
         </Grid>
@@ -118,8 +117,8 @@ export function CraneForm({ crane }: { crane?: Crane }) {
 
       <Section title="Capacidad y uso">
         <Grid cols={3}>
-          <Field label="Capacidad (t)">
-            <input name="capacity_tons" required inputMode="decimal" defaultValue={v("capacity_tons")} className={inputClass} />
+          <Field label="Capacidad verificada (t métricas)" hint="Vacío si falta confirmar la unidad de medida o no aplica.">
+            <input name="capacity_tons" inputMode="decimal" defaultValue={v("capacity_tons")} className={inputClass} />
           </Field>
           <Field label="Pluma (m)">
             <input name="boom_length_m" inputMode="decimal" defaultValue={v("boom_length_m")} className={inputClass} />
@@ -130,10 +129,10 @@ export function CraneForm({ crane }: { crane?: Crane }) {
           <Field label="Horómetro (h)">
             <input name="hour_meter" inputMode="decimal" defaultValue={v("hour_meter")} className={inputClass} />
           </Field>
-          <Field label="Servicio cada (h)" hint={type === "grua_armable" ? "Típico: 500 h" : "Típico: 250 h"}>
-            <input name="service_interval_hours" inputMode="decimal" defaultValue={v("service_interval_hours")} className={inputClass} placeholder={type === "grua_armable" ? "500" : "250"} />
+          <Field label="Servicio cada (h)" hint="Sólo el intervalo confirmado en el manual de esta unidad.">
+            <input name="service_interval_hours" inputMode="decimal" defaultValue={v("service_interval_hours")} className={inputClass} placeholder="Pendiente de confirmar" />
           </Field>
-          <Field label="Último servicio a las (h)" hint="Vacío = horómetro actual">
+          <Field label="Último servicio a las (h)" hint="Vacío = historial pendiente">
             <input name="last_service_hours" inputMode="decimal" defaultValue={v("last_service_hours")} className={inputClass} />
           </Field>
         </Grid>
@@ -169,11 +168,11 @@ export function CraneForm({ crane }: { crane?: Crane }) {
         <Field label="Notas">
           <textarea name="notes" rows={2} defaultValue={v("notes")} className={inputClass + " h-auto py-2.5"} />
         </Field>
-        {crane && <Check name="active" label="Activa" hint="Desmárcala para dar de baja la grúa (deja de aparecer en flota y agenda)." defaultChecked={crane.active} />}
+        {crane && <Check name="active" label="Activa" hint="Desmárcala para dar de baja la unidad (deja de aparecer en flota y agenda)." defaultChecked={crane.active} />}
       </Section>
 
       <FormMessage state={state} />
-      <Submit pending={pending}>{crane ? "Guardar cambios" : "Dar de alta grúa"}</Submit>
+      <Submit pending={pending}>{crane ? "Guardar cambios" : "Dar de alta unidad"}</Submit>
     </form>
   );
 }

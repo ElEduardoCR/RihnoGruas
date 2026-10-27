@@ -37,7 +37,8 @@ async function Loader({ params }: { params: Promise<{ token: string }> }) {
     <Wizard
       token={token}
       inspection={{
-        title: CHECKLIST_KIND_LABELS[i.kind],
+        title: i.kind === "mantenimiento" ? i.title : CHECKLIST_KIND_LABELS[i.kind],
+        kind: i.kind,
         status: i.status,
         started: Boolean(i.started_at),
         scheduledFor: i.scheduled_for,

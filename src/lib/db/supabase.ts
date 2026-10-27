@@ -33,6 +33,14 @@ export function supabaseDb(client: AnyClient): Db {
   return {
     mode: "supabase",
 
+    async createMaintenanceBundle(bundle) {
+      const { data, error } = await client.rpc("create_maintenance_checklist", {
+        p_order: bundle.order, p_inspection: bundle.inspection, p_items: bundle.items, p_repeat: bundle.repeat ?? false,
+      });
+      if (error) fail("maintenance_orders", "create bundle", error);
+      return data as Tables["maintenance_orders"];
+    },
+
     async select<T extends TableName>(table: T, q?: Query) {
       const { data, error } = await applyQuery(tbl(table).select("*"), q);
       if (error) fail(table, "select", error);

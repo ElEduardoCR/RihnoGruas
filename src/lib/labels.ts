@@ -11,14 +11,22 @@ import type {
 
 export const CRANE_TYPE_LABELS: Record<CraneType, string> = {
   grua_movil: "Grúa móvil",
-  camion_grua: "Titán",
+  camion_grua: "Camión grúa",
   grua_armable: "Armable en sitio",
+  telehandler: "Manipulador telescópico",
+  tractocamion: "Tractocamión",
+  remolque: "Remolque / cama baja",
+  vehiculo_apoyo: "Vehículo de apoyo",
 };
 
 export const CRANE_TYPE_LONG: Record<CraneType, string> = {
   grua_movil: "Grúa móvil (todo terreno / RT)",
-  camion_grua: "Titán · camión grúa articulada",
+  camion_grua: "Camión grúa (articulada / telescópica)",
   grua_armable: "Grúa armable en sitio (torre / celosía)",
+  telehandler: "Manipulador telescópico",
+  tractocamion: "Tractocamión de transporte",
+  remolque: "Remolque / cama baja",
+  vehiculo_apoyo: "Vehículo de apoyo",
 };
 
 export const STATUS_LABELS: Record<CraneStatus, string> = {
@@ -55,6 +63,7 @@ export const CHECKLIST_KIND_LABELS: Record<ChecklistKind, string> = {
   pre_renta: "Pre-renta",
   post_renta: "Recepción post-renta",
   diaria: "Diaria del operador",
+  mantenimiento: "Checklist de mantenimiento",
 };
 
 export const INVENTORY_CATEGORY_LABELS: Record<InventoryCategory, string> = {

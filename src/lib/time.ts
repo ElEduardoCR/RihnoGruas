@@ -115,8 +115,8 @@ export const fmt = {
 export const money = (n: number, digits = 0) =>
   new Intl.NumberFormat("es-MX", { style: "currency", currency: "MXN", maximumFractionDigits: digits }).format(n);
 
-export const num = (n: number, digits = 0) =>
-  new Intl.NumberFormat("es-MX", { maximumFractionDigits: digits }).format(n);
+export const num = (n: number | null, digits = 0) =>
+  n == null ? "—" : new Intl.NumberFormat("es-MX", { maximumFractionDigits: digits }).format(n);
 
 /** Valor para <input type="datetime-local"> en hora CDMX. */
 export function toLocalInput(d: Date): string {

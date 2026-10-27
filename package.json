@@ -11,7 +11,11 @@
     "db:seed": "tsx --conditions=react-server --env-file-if-exists=.env.local scripts/seed.ts",
     "db:link": "node scripts/supabase.mjs link",
     "db:push": "node scripts/supabase.mjs push",
-    "db:status": "node scripts/supabase.mjs status"
+    "db:status": "node scripts/supabase.mjs status",
+    "fleet:import": "tsx --env-file-if-exists=.env.local scripts/import-fleet.ts",
+    "fleet:preview": "DEMO_MODE=1 FLEET_PREVIEW=1 next dev --port 3100",
+    "fleet:check": "tsx --conditions=react-server --test src/lib/fleet/*.test.ts",
+    "fleet:checklists": "tsx --env-file-if-exists=.env.local scripts/update-maintenance-checklists.ts"
   },
   "dependencies": {
     "@supabase/ssr": "^0.12.7",

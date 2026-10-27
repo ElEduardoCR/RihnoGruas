@@ -198,7 +198,7 @@ async function Calendar({ searchParams }: { searchParams: SP }) {
   );
 }
 
-function DayPanel({ day, cranes, events }: { day: string; cranes: { id: string; code: string; name: string; capacity_tons: number }[]; events: FleetEvent[] }) {
+function DayPanel({ day, cranes, events }: { day: string; cranes: { id: string; code: string; name: string; capacity_tons: number | null }[]; events: FleetEvent[] }) {
   const ds = fromDayKey(day);
   const de = addDays(ds, 1);
   const dayEvents = events.filter((e) => Date.parse(e.start) < de.getTime() && (e.open || Date.parse(e.end) > ds.getTime()));
@@ -214,7 +214,7 @@ function DayPanel({ day, cranes, events }: { day: string; cranes: { id: string; 
           <div className="flex flex-wrap gap-1.5">
             {free.map((c) => (
               <Link key={c.id} href={`/gruas/${c.id}`}>
-                <Badge tone="green">{c.code} · {c.capacity_tons} t</Badge>
+                <Badge tone="green">{c.code}{c.capacity_tons != null ? ` · ${c.capacity_tons} t` : ""}</Badge>
               </Link>
             ))}
             {free.length === 0 && <span className="text-[13px] text-muted">Ninguna</span>}

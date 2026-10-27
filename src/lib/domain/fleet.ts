@@ -141,6 +141,11 @@ export function docsHealth(docs: CraneDocument[], now: Date): DocHealth {
 }
 
 export function serviceUsage(c: Pick<Crane, "hour_meter" | "last_service_hours" | "service_interval_hours">) {
+  if (c.hour_meter == null || c.last_service_hours == null || c.service_interval_hours == null ||
+      !Number.isFinite(c.hour_meter) || !Number.isFinite(c.last_service_hours) ||
+      !Number.isFinite(c.service_interval_hours) || c.service_interval_hours <= 0 || c.hour_meter < c.last_service_hours) {
+    return { known: false, used: 0, pct: 0, remaining: Infinity };
+  }
   const used = c.hour_meter - c.last_service_hours;
-  return { used, pct: Math.min(1.2, used / c.service_interval_hours), remaining: c.service_interval_hours - used };
+  return { known: true, used, pct: Math.min(1.2, used / c.service_interval_hours), remaining: c.service_interval_hours - used };
 }

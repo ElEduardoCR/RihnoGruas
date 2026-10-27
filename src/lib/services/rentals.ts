@@ -35,10 +35,22 @@ export async function craneConflicts(db: Db, craneId: string, from: Date, to: Da
   return out;
 }
 
-/** Problemas de documentación que impedirían cubrir la renta. */
+/** La capacidad reportada no habilita un equipo de izaje hasta verificar su tabla. */
+export function identificationIssue(crane: Pick<Crane, "type" | "fleet_profile" | "capacity_tons">): string | null {
+  return crane.fleet_profile && crane.capacity_tons == null && ["grua_movil", "camion_grua", "grua_armable", "telehandler"].includes(crane.type)
+    ? "Capacidad métrica y tabla de cargas de la unidad pendientes de verificar"
+    : null;
+}
+
+/** Problemas de documentación o identificación que impedirían cubrir la renta. */
 export async function documentIssues(db: Db, craneId: string, until: Date, now: Date) {
-  const docs = await db.select("crane_documents", { eq: { crane_id: craneId } });
+  const [docs, crane] = await Promise.all([
+    db.select("crane_documents", { eq: { crane_id: craneId } }),
+    db.get("cranes", craneId),
+  ]);
   const issues: { blocking: boolean; text: string }[] = [];
+  const identification = crane ? identificationIssue(crane) : null;
+  if (identification) issues.push({ blocking: true, text: identification });
   for (const d of docs) {
     if (!d.expires_on) continue;
     const { health } = docStatus(d, now);
@@ -56,7 +68,7 @@ export async function findAvailable(
 ) {
   const cranes = await db.select("cranes", { eq: { active: true }, order: { column: "code" } });
   const candidates = cranes.filter(
-    (c) => (!q.type || c.type === q.type) && (!q.minCapacity || c.capacity_tons >= q.minCapacity),
+    (c) => (!q.type || c.type === q.type) && (q.minCapacity == null || (c.capacity_tons != null && c.capacity_tons >= q.minCapacity)),
   );
   const result: { crane: Crane; available: boolean; conflicts: Conflict[]; docIssues: { blocking: boolean; text: string }[] }[] = [];
   for (const crane of candidates) {
@@ -90,7 +102,13 @@ export async function createRental(db: Db, input: CreateRentalInput, now: Date) 
   if (!(input.end > input.start)) throw new RentalError("La fecha de fin debe ser posterior al inicio.");
   if (input.end < now) throw new RentalError("La renta termina en el pasado.");
   const crane = await db.get("cranes", input.craneId);
-  if (!crane) throw new RentalError("Grúa no encontrada.");
+  if (!crane || !crane.active) throw new RentalError("Unidad activa no encontrada.");
+
+  // Validar antes de insertar: cada categoría necesita sus propias revisiones.
+  const templates = await db.select("checklist_templates", { eq: { active: true } });
+  if (!templates.some((t) => t.kind === "revision_total" && t.crane_types.includes(crane.type))) {
+    throw new RentalError("Falta una plantilla de revisión compatible con este tipo de unidad.");
+  }
 
   const conflicts = await craneConflicts(db, crane.id, input.start, input.end);
   if (conflicts.length) {

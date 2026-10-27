@@ -6,7 +6,7 @@ import { getAdminDb, getDb } from "@/lib/db";
 import { currentStaff } from "@/lib/auth";
 import { createRental, cancelRental, RentalError } from "@/lib/services/rentals";
 import { scheduleInspection } from "@/lib/services/inspections";
-import { completeMaintenance, releaseCrane, reportDowntime, scheduleMaintenance } from "@/lib/services/maintenance";
+import { completeMaintenance, releaseCrane, reportDowntime, scheduleMaintenance, repeatMaintenanceChecklist } from "@/lib/services/maintenance";
 import { registerCount, registerPurchase, requestIssue, resolveMovement } from "@/lib/services/inventory";
 import { runAgent } from "@/lib/agent/run";
 import { runProactiveScan, sendDailyBrief } from "@/lib/agent/proactive";
@@ -15,7 +15,7 @@ import type { DowntimeCategory, PurchaseCategory } from "@/lib/types";
 import { isDemo } from "@/lib/env";
 import { createUserSupabase } from "@/lib/db";
 
-export type FormState = { ok: boolean; message: string; details?: string[] } | null;
+export type FormState = { ok: boolean; message: string; details?: string[]; checklistUrl?: string } | null;
 
 const str = (f: FormData, k: string) => {
   const v = f.get(k);
@@ -122,10 +122,12 @@ export async function scheduleInspectionAction(_: FormState, f: FormData): Promi
 export async function scheduleMaintenanceAction(_: FormState, f: FormData): Promise<FormState> {
   try {
     const db = await getDb();
+    const me = await currentStaff(db);
+    if (!me || !["direccion", "administracion", "mecanico"].includes(me.role)) throw new Error("No tienes permiso para programar mantenimientos.");
     const start = localDate(str(f, "start"));
     const end = localDate(str(f, "end"));
     if (!start || !end) return { ok: false, message: "Indica inicio y fin." };
-    await scheduleMaintenance(db, {
+    const order = await scheduleMaintenance(db, {
       craneId: str(f, "crane_id")!,
       kind: (str(f, "kind") ?? "preventivo") as "preventivo",
       title: str(f, "title") ?? "Mantenimiento",
@@ -134,9 +136,11 @@ export async function scheduleMaintenanceAction(_: FormState, f: FormData): Prom
       end,
       mechanicId: str(f, "mechanic_id"),
       createdBy: "web",
+      planId: str(f, "plan_id"),
     });
+    const inspections = order.plan_id ? await db.select("inspections", { eq: { maintenance_order_id: order.id }, order: { column: "created_at", ascending: false }, limit: 1 }) : [];
     refresh();
-    return { ok: true, message: "Mantenimiento programado." };
+    return { ok: true, message: inspections.length ? "Mantenimiento y checklist programados." : "Mantenimiento programado.", checklistUrl: inspections[0] ? `/c/${inspections[0].access_token}` : undefined };
   } catch (e) {
     return fail(e);
   }
@@ -145,12 +149,26 @@ export async function scheduleMaintenanceAction(_: FormState, f: FormData): Prom
 export async function completeMaintenanceAction(_: FormState, f: FormData): Promise<FormState> {
   try {
     const db = await getDb();
+    const me = await currentStaff(db);
+    if (!me || !["direccion", "administracion", "mecanico"].includes(me.role)) throw new Error("No tienes permiso para cerrar mantenimientos.");
     await completeMaintenance(db, str(f, "id")!, numOf(f, "cost") ?? 0, new Date());
     refresh();
     return { ok: true, message: "Orden cerrada." };
   } catch (e) {
     return fail(e);
   }
+}
+
+export async function repeatMaintenanceChecklistAction(_: FormState, f: FormData): Promise<FormState> {
+  try {
+    const db = await getDb();
+    const me = await currentStaff(db);
+    if (!me || !["direccion", "administracion", "mecanico"].includes(me.role)) throw new Error("No tienes permiso para repetir este checklist.");
+    const inspection = await repeatMaintenanceChecklist(db, str(f, "id")!);
+    if (!inspection) throw new Error("No se pudo recuperar el nuevo checklist.");
+    refresh();
+    return { ok: true, message: "Nuevo intento preparado. El anterior permanece en el historial.", checklistUrl: `/c/${inspection.access_token}` };
+  } catch (e) { return fail(e); }
 }
 
 export async function requestIssueAction(_: FormState, f: FormData): Promise<FormState> {

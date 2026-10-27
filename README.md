@@ -145,6 +145,30 @@ src/lib/demo/             Datos de demostración, plantillas de checklist y pol�
 ```
 
 ## Siguientes pasos sugeridos
+
+### Flota de Sergio (27 de octubre de 2026)
+
+El catálogo investigado está en `src/lib/fleet/sergio.ts`: 23 unidades identificables, con referencias pendientes para conciliar las 3 National y el International. Los prefijos GR/AP evitan confundir números económicos repetidos; PEND identifica claves internas provisionales.
+
+- `npm run fleet:check`: comprueba identidades, importación repetible, fuentes y manejo de datos desconocidos.
+- `npm run fleet:preview`: abre una vista local en el puerto 3100, con esta flota y sin operaciones ficticias. Los cambios de esta vista se reinician al detenerla.
+- `npm run db:push`: aplica la migración que incorpora categorías de apoyo, datos desconocidos y fichas investigadas.
+- `npm run fleet:import`: consulta la base y detecta posibles duplicados sin escribir.
+- `npm run fleet:import -- --apply`: inserta unidades, planes dentro del expediente, plantillas por categoría, puntos propios y conciliación para Rhino. No modifica registros importados previamente ni programa fechas de servicio. Si se interrumpe, puede repetirse.
+
+Las capacidades y alturas reportadas se conservan separadas de los valores operativos verificados. Las grúas importadas con capacidad métrica pendiente no pueden confirmarse para renta. Los planes contienen tareas y fuentes; la programación se hace desde el expediente tras validar manual, serie e historial. Sólo dos inspecciones de la familia GMK tienen intervalos numéricos respaldados por un boletín del fabricante. Las fotos de CAT, Matiz y Figo son referencias de familia con crédito y licencia en su expediente, no fotos de las unidades de Rhino.
+
+### Checklists interactivos de mantenimiento
+
+`src/lib/fleet/maintenance-checklists.ts` define 48 procedimientos base vinculados a los 114 planes de las 23 unidades. Cada paso especifica instrucciones, tomas fotográficas y referencia. La primera comprobación exige identificar la placa y el manual aplicable a la serie; los documentos de familia no sustituyen ese manual. No se inventan tolerancias, torques, fluidos o intervalos pendientes.
+
+- Aplica la migración `checklists_mantenimiento` con `npm run db:push`.
+- `npm run fleet:checklists` verifica la carga; `npm run fleet:checklists -- --apply` actualiza únicamente las definiciones de checklist dentro de los planes existentes, conservando el resto del expediente e historial.
+- Abre **Checklists → Mantenimiento**, entra al expediente de la unidad y usa **Ver checklist** o **Programar** en el plan. Programar crea la orden y una copia de sus pasos en una sola operación; no envía mensajes.
+- Para empezar en ese momento, usa **Checklists → Iniciar revisión**: selecciona unidad y tipo, y pulsa **Empezar revisión**. En mantenimiento elige también el plan y el tiempo previsto. Se abre el primer paso pendiente, se retoman revisiones abiertas compatibles y no se envían mensajes. El expediente incluye el mismo acceso y cada plan tiene **Iniciar este trabajo**.
+- El enlace de ejecución guarda cada paso, sus fotos por toma, observaciones y firma final. El cierre de la orden exige el último intento aprobado, con evidencia completa y calidad mínima. Repetir conserva el intento anterior. Un servicio parcial no reinicia el contador de servicio general ni libera automáticamente una unidad detenida.
+- `npm run fleet:check` incluye cobertura de catálogo y pruebas del flujo, secuencia, manual, fotos, repetición y cierre. Para probar sin tocar la base, `CHECKLIST_PREVIEW=1 npm run fleet:preview` agrega un único trabajo marcado DEMO, en memoria, disponible en `/c/demo-maintenance-preview`. Esta prueba está deshabilitada en producción.
+
 - Subida de archivos PDF al expediente (la columna `file_path` y el visor `/api/files` ya existen).
 - Plantillas de WhatsApp adicionales (resumen matutino, solicitud de autorización con botones).
 - Exportar `agent_runs` calificados a JSONL para fine-tuning cuando haya 50+ ejemplos buenos.

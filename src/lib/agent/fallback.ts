@@ -33,16 +33,18 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
       return `Para registrar cambios por WhatsApp necesito el modo IA activo (falta OPENAI_API_KEY). Mientras tanto puedes hacerlo en la web: ${env.appUrl}`;
     }
 
-    const code = t.match(/rh[\s-]*0*(\d{1,2})/);
+    const codes = t.match(/\b(?:rh|gr|ap)[\s-]*\d{1,3}\b|\bpend-[a-z]+\b/g) ?? [];
+    if (codes.length > 1) return "Indica una unidad por consulta con su código completo, por ejemplo GR-03 o AP-03.";
+    const code = codes[0];
     if (code) {
-      const g = await call<Record<string, unknown> & { documentos: { tipo: string; estado: string; vence: string }[]; agenda_proxima: { tipo: string; titulo: string; inicio: string }[]; operadores_aprobados: { nombre: string; licencia_vigente: boolean }[] }>("consultar_grua", { grua: `RH-${code[1]}` });
+      const g = await call<Record<string, unknown> & { documentos: { tipo: string; estado: string; vence: string }[]; agenda_proxima: { tipo: string; titulo: string; inicio: string }[]; operadores_aprobados: { nombre: string; licencia_vigente: boolean }[] }>("consultar_grua", { grua: code });
       if (g) {
         const docsBad = g.documentos.filter((d) => d.estado !== "ok");
         return [
-          `*${g.grua}* · ${g.tipo} · ${g.capacidad_t} t`,
-          `Estado: *${g.estado}*${g.detencion_abierta ? ` (${g.detencion_abierta})` : ""}`,
-          `Horómetro: ${g.horometro_h} h · ${g.servicio}`,
-          docsBad.length ? `⚠️ Documentos: ${docsBad.map((d) => `${d.tipo} (${d.estado}, ${d.vence})`).join("; ")}` : "✅ Documentos vigentes",
+          `*${g.grua}* · ${g.tipo}${g.capacidad_t == null ? " · capacidad pendiente / no aplica" : ` · ${g.capacidad_t} t`}`,
+          `Estado de agenda: *${g.estado}*${g.detencion_abierta ? ` (${g.detencion_abierta})` : ""}${g.restriccion_renta ? `\n⚠️ ${g.restriccion_renta}` : ""}`,
+          `Horómetro: ${g.horometro_h == null ? "pendiente" : `${g.horometro_h} h`} · ${g.servicio}`,
+          docsBad.length ? `⚠️ Documentos: ${docsBad.map((d) => `${d.tipo} (${d.estado}, ${d.vence})`).join("; ")}` : g.documentos.length ? "✅ Documentos registrados vigentes" : "Documentos pendientes de registrar",
           `Operadores: ${g.operadores_aprobados.map((o) => `${o.nombre}${o.licencia_vigente ? "" : " ⚠️ licencia vencida"}`).join(", ")}`,
           g.agenda_proxima.length ? `Próximo:\n${g.agenda_proxima.slice(0, 4).map((e) => `• ${e.inicio} ${e.tipo}: ${e.titulo}`).join("\n")}` : "Sin eventos próximos.",
         ].join("\n");
@@ -53,11 +55,11 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
       const day = parseDay(t, ctx.now) ?? dayKey(addDays(ctx.now, 1));
       const tipo = /(titan|camion)/.test(t) ? "camion_grua" : /movil/.test(t) ? "grua_movil" : /(torre|armable|oruga|celosia)/.test(t) ? "grua_armable" : null;
       const cap = t.match(/(\d+)\s*(t\b|ton)/);
-      const r = await call<{ rango: string; disponibles: { grua: string; capacidad_t: number; tarifa_dia: number }[]; no_disponibles: { grua: string; motivos: string[] }[] }>("buscar_disponibilidad", { desde: day, hasta: day, tipo, capacidad_minima: cap ? Number(cap[1]) : null });
+      const r = await call<{ rango: string; disponibles: { grua: string; capacidad_t: number | null; tarifa_dia: number | null }[]; no_disponibles: { grua: string; motivos: string[] }[] }>("buscar_disponibilidad", { desde: day, hasta: day, tipo, capacidad_minima: cap ? Number(cap[1]) : null });
       if (r) {
         return r.disponibles.length
-          ? `Libres el ${r.rango.split("→")[0].trim()}:\n${r.disponibles.map((d) => `• *${d.grua}* (${d.capacidad_t} t) · ${money(d.tarifa_dia ?? 0)}/día`).join("\n")}`
-          : `No hay grúas libres con esos criterios. Ocupadas:\n${r.no_disponibles.slice(0, 5).map((d) => `• ${d.grua}: ${d.motivos[0]}`).join("\n")}`;
+          ? `Libres el ${r.rango.split("→")[0].trim()}:\n${r.disponibles.map((d) => `• *${d.grua}*${d.capacidad_t == null ? "" : ` (${d.capacidad_t} t)`} · ${d.tarifa_dia == null ? "tarifa pendiente" : `${money(d.tarifa_dia)}/día`}`).join("\n")}`
+          : `No hay unidades disponibles para renta con esos criterios. Motivos:\n${r.no_disponibles.slice(0, 5).map((d) => `• ${d.grua}: ${d.motivos[0]}`).join("\n")}`;
       }
     }
 
@@ -73,7 +75,7 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
           ...r.documentos.map((d) => `• *${d.grua}* ${d.documento}: ${d.dias < 0 ? `VENCIDO (${d.vence})` : `vence ${d.vence} (${d.dias} d)`}`),
           ...r.licencias.map((l) => `• Licencia de ${l.operador}: ${l.dias < 0 ? `VENCIDA (${l.vence})` : `vence ${l.vence}`}`),
         ];
-        return lines.length ? `Vencimientos en los próximos 30 días:\n${lines.join("\n")}` : "✅ Nada vence en los próximos 30 días.";
+        return lines.length ? `Vencimientos en los próximos 30 días:\n${lines.join("\n")}` : "No hay vencimientos registrados para los próximos 30 días; los documentos pendientes de registrar no se pueden evaluar.";
       }
     }
 
@@ -122,14 +124,17 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
     }
 
     if (/(flota|estado|como (esta|va)|resumen|detenid|rentad|gruas)/.test(t)) {
-      const r = await call<{ grua: string; estado: string; ahora: string | null }[]>("consultar_flota", { estado: null, tipo: null });
+      const r = await call<{ grua: string; estado: string; ahora: string | null; restriccion_renta: string | null }[]>("consultar_flota", { estado: null, tipo: null });
       if (r) {
         const by = (s: string) => r.filter((c) => c.estado === s);
+        const free = by("disponible").filter((c) => !c.restriccion_renta);
+        const pending = r.filter((c) => c.restriccion_renta);
         return [
-          `🏗️ *Flotilla:* ${by("disponible").length} disponibles · ${by("rentada").length} rentadas · ${by("mantenimiento").length} en mantenimiento · ${by("detenida").length} detenidas`,
+          `🏗️ *Flotilla:* ${free.length} sin eventos ni bloqueo de identificación · ${by("rentada").length} rentadas · ${by("mantenimiento").length} en mantenimiento · ${by("detenida").length} detenidas`,
           ...by("detenida").map((c) => `🛑 *${c.grua}*: ${c.ahora}`),
           ...by("mantenimiento").map((c) => `🔧 *${c.grua}*: ${c.ahora}`),
-          `Libres: ${by("disponible").map((c) => c.grua.split(" ")[0]).join(", ") || "ninguna"}`,
+          `Sin eventos: ${free.map((c) => c.grua.split(" ")[0]).join(", ") || "ninguna"}`,
+          ...(pending.length ? [`Pendientes de verificar capacidad y tabla de cargas: ${pending.map((c) => c.grua.split(" ")[0]).join(", ")}.`] : []),
         ].join("\n");
       }
     }
