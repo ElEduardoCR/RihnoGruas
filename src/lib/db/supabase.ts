@@ -72,6 +72,15 @@ export function supabaseDb(client: AnyClient): Db {
       return data as Tables[T];
     },
 
+    async updatePendingAction(id, expectedStatus, patch, guard) {
+      let query = tbl("agent_pending_actions").update(patch).eq("id", id).eq("status", expectedStatus);
+      if (guard?.staffId) query = query.eq("staff_id", guard.staffId);
+      if (guard?.unexpiredAt) query = query.gt("expires_at", guard.unexpiredAt);
+      const { data, error } = await query.select("*").maybeSingle();
+      if (error) fail("agent_pending_actions", "transition", error);
+      return data as Tables["agent_pending_actions"] | null;
+    },
+
     async remove<T extends TableName>(table: T, id: string) {
       const { error } = await tbl(table).delete().eq("id", id);
       if (error) fail(table, "delete", error);

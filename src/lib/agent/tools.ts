@@ -1,5 +1,5 @@
 import type { Db } from "@/lib/db/types";
-import type { Channel, CraneType, DowntimeCategory, PurchaseCategory, Staff, StaffRole } from "@/lib/types";
+import type { Channel, Client, CraneType, DowntimeCategory, PurchaseCategory, Staff, StaffRole } from "@/lib/types";
 import { docStatus } from "@/lib/domain/fleet";
 import { CHECKLIST_KIND_LABELS, CRANE_TYPE_LABELS, DOC_LABELS, PURCHASE_CATEGORY_LABELS } from "@/lib/labels";
 import { env } from "@/lib/env";
@@ -9,6 +9,7 @@ import { scheduleInspection, listInspections } from "@/lib/services/inspections"
 import { releaseCrane, reportDowntime, scheduleMaintenance } from "@/lib/services/maintenance";
 import { findMovement, getStock, inventoryWatch, registerPurchase, requestIssue, resolveMovement } from "@/lib/services/inventory";
 import { expenseSummary, latestPurchases } from "@/lib/services/expenses";
+import { assertManager, saveClient, saveCrane, type CraneInput } from "@/lib/services/catalogs";
 import { inspectionLink, sendToStaff } from "@/lib/services/notify";
 import { addDays, daysUntil, fmt, money, startOfDay, zonedDate, zonedParts } from "@/lib/time";
 import { searchKnowledge } from "./knowledge";
@@ -68,10 +69,17 @@ const DATE_HINT = "Fecha local CDMX en formato YYYY-MM-DD o YYYY-MM-DDTHH:mm";
 // ---------------------------------------------------------------- helpers
 function parseWhen(value: unknown, defaultHour: number, label: string): Date {
   const s = String(value ?? "").trim();
-  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?/);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})(?:[T\s](\d{1,2}):(\d{2}))?$/);
   if (!m) throw new ToolError(`${label}: fecha inválida "${s}". Usa YYYY-MM-DD o YYYY-MM-DDTHH:mm.`);
   const [, y, mo, d, h, mi] = m;
-  return zonedDate(Number(y), Number(mo), Number(d), h ? Number(h) : defaultHour, mi ? Number(mi) : 0);
+  const hour = h ? Number(h) : defaultHour;
+  const minute = mi ? Number(mi) : 0;
+  const date = zonedDate(Number(y), Number(mo), Number(d), hour, minute);
+  const p = zonedParts(date);
+  if (p.year !== Number(y) || p.month !== Number(mo) || p.day !== Number(d) || p.hour !== hour || p.minute !== minute) {
+    throw new ToolError(`${label}: esa fecha u hora no existe. Indica una fecha válida.`);
+  }
+  return date;
 }
 
 async function craneOrThrow(db: Db, q: unknown) {
@@ -107,6 +115,34 @@ async function matchItems(db: Db, query: string) {
 const craneLabel = (c: { code: string; name: string }) => `${c.code} ${c.name}`;
 
 // ---------------------------------------------------------------- herramientas de lectura
+const consultarCapacidades: ReadTool = {
+  kind: "read",
+  name: "consultar_capacidades",
+  description: "Acciones y consultas que este usuario puede pedir al agente según su rol. Úsala para orientar a alguien nuevo o comprobar el alcance antes de prometer una operación.",
+  parameters: obj({}),
+  async run(_a, { staff }) {
+    return {
+      consultas: toolsFor(staff).filter((t) => t.kind === "read" && t.name !== "consultar_capacidades").map((t) => ({ nombre: t.name, descripcion: t.description })),
+      acciones: toolsFor(staff).filter((t) => t.kind === "write").map((t) => ({ nombre: t.name, descripcion: t.description })),
+      proceso: "Consultar datos y condiciones, pedir sólo datos indispensables, preparar el resumen y ejecutar al confirmar. No se pueden ejecutar acciones ausentes de esta lista.",
+    };
+  },
+};
+
+const consultarClientes: ReadTool = {
+  kind: "read",
+  name: "consultar_clientes",
+  description: "Busca clientes por nombre o contacto para evitar pedir datos que ya están registrados. Devuelve coincidencias para que el usuario pueda elegir si el nombre es ambiguo.",
+  roles: [...MGMT, "ventas"],
+  parameters: obj({ buscar: optStr("Nombre del cliente o contacto, o null para ver los primeros clientes") }),
+  async run(a, { db }) {
+    const q = norm(String(a.buscar ?? ""));
+    const clients = await db.select("clients", { order: { column: "name" } });
+    return clients.filter((c) => !q || norm(`${c.name} ${c.contact_name ?? ""}`).includes(q)).slice(0, 30)
+      .map((c) => ({ nombre: c.name, contacto: c.contact_name, telefono: c.phone, correo: c.email, rfc: c.rfc, direccion: c.address }));
+  },
+};
+
 const consultarFlota: ReadTool = {
   kind: "read",
   name: "consultar_flota",
@@ -392,6 +428,70 @@ const enviarRevision: ReadTool = {
 };
 
 // ---------------------------------------------------------------- herramientas que modifican (con confirmación)
+const textValue = (value: unknown) => typeof value === "string" ? value.trim() || null : null;
+
+const registrarCliente: WriteTool = {
+  kind: "write",
+  name: "registrar_cliente",
+  description: "Da de alta un cliente desde la conversación. Sólo el nombre es indispensable; no inventes RFC, teléfono o correo. Comprueba duplicados antes de preparar el alta.",
+  roles: MGMT,
+  parameters: obj({ nombre: str("Nombre o razón social"), contacto: optStr("Persona de contacto"), telefono: optStr("Teléfono"), correo: optStr("Correo"), rfc: optStr("RFC"), direccion: optStr("Dirección"), notas: optStr("Notas") }),
+  async prepare(a, { db, staff }) {
+    assertManager(staff);
+    const name = textValue(a.nombre);
+    if (!name) throw new ToolError("Indica el nombre del cliente.");
+    const clients = await db.select("clients");
+    if (clients.some((c) => norm(c.name) === norm(name))) throw new ToolError(`El cliente ${name} ya está registrado. Puedo consultar sus datos.`);
+    const email = textValue(a.correo)?.toLowerCase() ?? null;
+    if (email && !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(email)) throw new ToolError("El correo no tiene un formato válido.");
+    const rfc = textValue(a.rfc)?.toUpperCase() ?? null;
+    if (rfc && !/^[A-ZÑ&]{3,4}\d{6}[A-Z0-9]{3}$/.test(rfc)) throw new ToolError("El RFC no tiene un formato válido.");
+    const input: Omit<Client, "id" | "created_at"> = { name, contact_name: textValue(a.contacto), phone: textValue(a.telefono), email, rfc, address: textValue(a.direccion), notes: textValue(a.notas) };
+    return {
+      summary: [`Registrar al cliente *${name}*.`, ...Object.entries({ Contacto: input.contact_name, Teléfono: input.phone, Correo: input.email, RFC: input.rfc, Dirección: input.address, Notas: input.notes }).filter(([, v]) => v).map(([label, value]) => `${label}: ${value}`), "Los datos no proporcionados quedarán pendientes."].join("\n"),
+      args: { input },
+    };
+  },
+  async execute(a, { db, staff }) {
+    assertManager(staff);
+    const client = await saveClient(db, a.input as Omit<Client, "id" | "created_at">);
+    return { mensaje: `✅ Cliente *${client.name}* registrado. Ya puedes pedirme una renta a su nombre.`, cliente_id: client.id };
+  },
+};
+
+const registrarGrua: WriteTool = {
+  kind: "write",
+  name: "registrar_grua",
+  description: "Da de alta una unidad de la flotilla con código, nombre, tipo, marca y modelo. Capacidad, año, serie y tarifa pueden quedar pendientes; no los deduzcas del modelo. El alta no verifica documentos ni habilita operadores.",
+  roles: MGMT,
+  parameters: obj({ codigo: str("Número económico único, incluido su prefijo"), nombre: str("Nombre de la unidad"), tipo: en(CRANE_TYPES, "Tipo de unidad"), marca: str("Marca"), modelo: str("Modelo"), anio: optNum("Año confirmado o null"), capacidad_toneladas: optNum("Capacidad verificada en toneladas o null"), numero_serie: optStr("Número de serie o null"), placas: optStr("Placas o null"), tarifa_diaria: optNum("Tarifa diaria en MXN o null"), notas: optStr("Notas o null") }),
+  async prepare(a, { db, staff }) {
+    assertManager(staff);
+    const code = textValue(a.codigo)?.toUpperCase().replace(/\s+/g, "-");
+    const name = textValue(a.nombre);
+    const brand = textValue(a.marca);
+    const model = textValue(a.modelo);
+    if (!code || !name || !brand || !model) throw new ToolError("Para registrar la unidad necesito número económico, nombre, marca y modelo.");
+    if (!CRANE_TYPES.includes(String(a.tipo))) throw new ToolError("Indica un tipo de unidad válido.");
+    for (const field of ["anio", "capacidad_toneladas", "tarifa_diaria"]) {
+      if (a[field] != null && (typeof a[field] !== "number" || !Number.isFinite(a[field]) || Number(a[field]) < 0)) throw new ToolError(`${field}: indica un número válido o déjalo pendiente.`);
+    }
+    if (a.anio != null && (!Number.isInteger(a.anio) || Number(a.anio) < 1950 || Number(a.anio) > 2100)) throw new ToolError("Indica un año válido.");
+    if (a.capacidad_toneladas === 0) throw new ToolError("La capacidad debe ser mayor que cero o quedar pendiente.");
+    if ((await db.select("cranes", { eq: { code } })).length) throw new ToolError(`Ya existe una unidad con el número económico ${code}.`);
+    const input: CraneInput = { code, name, type: a.tipo as CraneType, brand, model, year: (a.anio as number | null) ?? null, capacity_tons: (a.capacidad_toneladas as number | null) ?? null, serial_number: textValue(a.numero_serie), plates: textValue(a.placas), daily_rate: (a.tarifa_diaria as number | null) ?? null, notes: textValue(a.notas), boom_length_m: null, vin: null, hour_meter: null, odometer_km: null, service_interval_hours: null, last_service_hours: null, base_location: null, acquired_on: null, active: true };
+    return {
+      summary: [`Registrar *${code} ${name}*: ${brand} ${model} · ${CRANE_TYPE_LABELS[input.type]}.`, `Capacidad: ${input.capacity_tons == null ? "pendiente" : `${input.capacity_tons} t`} · tarifa: ${input.daily_rate == null ? "pendiente" : `${money(input.daily_rate)}/día`}.`, `Año: ${input.year ?? "pendiente"} · serie: ${input.serial_number ?? "pendiente"} · placas: ${input.plates ?? "pendientes"}.`, ...(input.notes ? [`Notas: ${input.notes}`] : []), "El alta no verifica documentos, tabla de cargas ni operadores."].join("\n"),
+      args: { input },
+    };
+  },
+  async execute(a, { db, staff }) {
+    assertManager(staff);
+    const crane = await saveCrane(db, a.input as CraneInput);
+    return { mensaje: `✅ Unidad *${crane.code} ${crane.name}* registrada. Faltan los documentos y operadores aprobados; el alta por sí sola no acredita que esté lista para trabajar.`, grua_id: crane.id };
+  },
+};
+
 const crearRenta: WriteTool = {
   kind: "write",
   name: "crear_renta",
@@ -682,6 +782,8 @@ const registrarCompra: WriteTool = {
 };
 
 export const TOOLS: Tool[] = [
+  consultarCapacidades,
+  consultarClientes,
   consultarFlota,
   consultarGrua,
   buscarDisponibilidad,
@@ -702,10 +804,12 @@ export const TOOLS: Tool[] = [
   registrarSalida,
   resolverSalida,
   registrarCompra,
+  registrarCliente,
+  registrarGrua,
 ];
 
 export function toolsFor(staff: Staff) {
-  return TOOLS.filter((t) => !t.roles || t.roles.includes(staff.role));
+  return TOOLS.filter((t) => (!t.roles || t.roles.includes(staff.role)) && (t.name !== "resolver_salida" || staff.can_authorize));
 }
 
 export const toolByName = (name: string) => TOOLS.find((t) => t.name === name);

@@ -1,8 +1,20 @@
 import type { ToolCallLog } from "@/lib/types";
-import { env } from "@/lib/env";
 import { addDays, dayKey, money, zonedParts } from "@/lib/time";
 import { flagText, qtyUnit } from "@/lib/labels";
 import { toolByName, toolsFor, type ToolCtx } from "./tools";
+
+const READ_HELP = [
+  ["consultar_flota", 'Estado de la flotilla ("¿cómo está la flota?")'],
+  ["consultar_grua", 'Expediente de una unidad ("RH-04")'],
+  ["buscar_disponibilidad", 'Disponibilidad ("¿qué titán está libre mañana?")'],
+  ["documentos_por_vencer", "Vencimientos de documentos"],
+  ["consultar_inventario", "Existencias de inventario"],
+  ["alertas_inventario", "Alertas de almacén"],
+  ["resumen_gastos", "Gastos del mes"],
+  ["estado_revisiones", "Revisiones de las unidades"],
+  ["consultar_agenda", "Agenda de la semana"],
+  ["buscar_politica", "Políticas internas"],
+] as const;
 
 /**
  * Agente por reglas para cuando no hay OPENAI_API_KEY (demo / contingencia).
@@ -10,11 +22,12 @@ import { toolByName, toolsFor, type ToolCtx } from "./tools";
  */
 export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog[]): Promise<string> {
   const t = text.toLowerCase().normalize("NFD").replace(/[̀-ͯ]/g, "");
-  const allowed = new Set(toolsFor(ctx.staff).map((x) => x.name));
-  const call = async <T>(name: string, args: Record<string, unknown>): Promise<T | null> => {
-    if (!allowed.has(name)) return null;
+  const allowed = new Set(toolsFor(ctx.staff).filter((tool) => tool.kind === "read").map((tool) => tool.name));
+  const help = READ_HELP.filter(([tool]) => allowed.has(tool)).map(([, label]) => `• ${label}`).join("\n");
+  const call = async <T>(name: string, args: Record<string, unknown>): Promise<T> => {
+    if (!allowed.has(name)) throw new Error("Tu perfil no tiene permiso para esa consulta. Pide a Dirección o Administración que revise tu acceso.");
     const tool = toolByName(name);
-    if (!tool || tool.kind !== "read") return null;
+    if (!tool || tool.kind !== "read") throw new Error("Esa consulta no está disponible en el modo básico.");
     const t0 = Date.now();
     try {
       const result = await tool.run(args, ctx);
@@ -29,8 +42,13 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
   const name = ctx.staff.full_name.split(" ")[0];
 
   try {
-    if (/\b(rent(a|ale|ar)|aparta|det(en|ien)|libera|saca|salida|compr(e|a|amos)|registra|programa|autoriza)/.test(t) && !/\?|cuanto|cual|que /.test(t)) {
-      return `Para registrar cambios por WhatsApp necesito el modo IA activo (falta OPENAI_API_KEY). Mientras tanto puedes hacerlo en la web: ${env.appUrl}`;
+    if (/(que puedes hacer|que puedo (hacer|pedir)|como (empiezo|funciona)|no se (usar|como)|guiame|ayudame a empezar)/.test(t)) {
+      return `Hola ${name}. Estas consultas están disponibles para tu perfil:\n${help}\nAhora estoy en modo de consultas básicas: puedo revisar datos, pero todavía no preparar cambios desde el chat. Administración debe activar la conexión de IA para que pueda guiarte y ejecutar operaciones. No se ha realizado ningún cambio.`;
+    }
+    const asksForChange = /^\s*(?:por favor[,:]?\s*)?(?:renta(le|r)?|aparta(r)?|deten(er)?|libera(r)?|saca(r)?|registra(r)?|programa(r)?|autoriza(r)?|da(r)? de alta|crea(r)?)\b/.test(t)
+      || /\b(?:quiero|necesito|puedes|podrias|ayudame a|vamos a)\b.*\b(?:rentar|apartar|detener|liberar|sacar|registrar|programar|autorizar|dar de alta|crear)\b/.test(t);
+    if (asksForChange) {
+      return "Entiendo que quieres hacer un cambio. Ahora estoy en modo de consultas básicas y no puedo preparar esa operación desde el chat; Administración debe activar la conexión de IA. No he modificado ningún dato. Puedes usar el módulo correspondiente del menú mientras se activa.";
     }
 
     const codes = t.match(/\b(?:rh|gr|ap)[\s-]*\d{1,3}\b|\bpend-[a-z]+\b/g) ?? [];
@@ -147,7 +165,7 @@ export async function fallbackAgent(text: string, ctx: ToolCtx, log: ToolCallLog
     return `No pude consultar eso: ${e instanceof Error ? e.message : e}`;
   }
 
-  return `Hola ${name} 👋 Soy *Rhino*. Puedo decirte:\n• Estado de la flotilla ("¿cómo está la flota?")\n• Una grúa ("RH-04")\n• Disponibilidad ("¿qué titán está libre mañana?")\n• Vencimientos de documentos\n• Inventario y alertas de almacén\n• Gastos del mes y revisiones pendientes`;
+  return `Hola ${name} 👋 Soy *Rhino*. Puedes pedirme estas consultas según tu perfil:\n${help}`;
 }
 
 const WEEKDAYS = ["domingo", "lunes", "martes", "miercoles", "jueves", "viernes", "sabado"];

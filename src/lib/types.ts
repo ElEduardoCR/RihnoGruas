@@ -420,7 +420,7 @@ export interface PendingAction {
   tool: string;
   args: Record<string, unknown>;
   summary: string;
-  status: "pendiente" | "confirmada" | "cancelada" | "expirada";
+  status: "pendiente" | "en_proceso" | "confirmada" | "cancelada" | "expirada" | "fallida";
   expires_at: string;
   resolved_at: string | null;
   result: unknown;

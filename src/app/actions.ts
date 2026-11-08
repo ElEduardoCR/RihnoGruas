@@ -9,6 +9,7 @@ import { scheduleInspection } from "@/lib/services/inspections";
 import { completeMaintenance, releaseCrane, reportDowntime, scheduleMaintenance, repeatMaintenanceChecklist } from "@/lib/services/maintenance";
 import { registerCount, registerPurchase, requestIssue, resolveMovement } from "@/lib/services/inventory";
 import { runAgent } from "@/lib/agent/run";
+import { webAgentContext, webConversation } from "@/lib/agent/conversation";
 import { runProactiveScan, sendDailyBrief } from "@/lib/agent/proactive";
 import { fmt, zonedDate } from "@/lib/time";
 import type { DowntimeCategory, PurchaseCategory } from "@/lib/types";
@@ -257,27 +258,26 @@ export async function registerCountAction(_: FormState, f: FormData): Promise<Fo
 // Agente
 // ---------------------------------------------------------------------------
 
-export async function agentChatAction(input: { staffId: string; text: string }) {
-  // El simulador usa el mismo camino que WhatsApp, con el teléfono del empleado elegido.
-  const db = isDemo ? await getDb() : getAdminDb();
-  const me = await currentStaff(await getDb());
-  if (!me || !["direccion", "administracion"].includes(me.role)) throw new Error("Sólo Dirección/Administración pueden usar el simulador");
-  const staff = await db.get("staff", input.staffId);
-  if (!staff?.phone) throw new Error("Ese empleado no tiene teléfono registrado");
-  const res = await runAgent(db, { phone: staff.phone, text: input.text, trigger: "web" });
+export async function agentChatAction(input: { text: string; expectedPendingId?: string }) {
+  if (typeof input?.text !== "string" || !input.text.trim()) throw new Error("Escribe qué necesitas hacer.");
+  if (input.text.length > 6000) throw new Error("Resume tu solicitud en menos de 6,000 caracteres.");
+  const { db, staff, phone } = await webAgentContext();
+  const res = await runAgent(db, { phone, staffId: staff.id, text: input.text.trim(), trigger: "web", expectedPendingId: input.expectedPendingId });
   refresh();
-  return res;
+  return { reply: res.reply, toolCalls: res.toolCalls, pending: res.pending, pendingId: res.pendingId };
 }
 
 export async function runScanAction(): Promise<FormState> {
-  const db = isDemo ? await getDb() : getAdminDb();
+  const { db, staff } = await webAgentContext();
+  if (!["direccion", "administracion"].includes(staff.role)) throw new Error("Sólo Dirección y Administración pueden enviar avisos al equipo.");
   const r = await runProactiveScan(db, new Date());
   refresh();
   return { ok: true, message: `Escaneo listo: ${r.insights} hallazgos, ${r.newAlerts} alertas nuevas enviadas.` };
 }
 
 export async function sendBriefAction(): Promise<FormState> {
-  const db = isDemo ? await getDb() : getAdminDb();
+  const { db, staff } = await webAgentContext();
+  if (!["direccion", "administracion"].includes(staff.role)) throw new Error("Sólo Dirección y Administración pueden enviar avisos al equipo.");
   const r = await sendDailyBrief(db, new Date());
   refresh();
   return { ok: true, message: `Resumen enviado a ${r.sent} persona(s).` };
@@ -291,14 +291,8 @@ export async function signOutAction() {
   redirect("/login");
 }
 
-export async function loadConversationAction(staffId: string) {
-  const db = await getDb();
-  const me = await currentStaff(db);
-  if (!me || !["direccion", "administracion"].includes(me.role)) throw new Error("Sin permiso");
-  const staff = await db.get("staff", staffId);
-  if (!staff?.phone) return [];
-  const msgs = await db.select("wa_messages", { eq: { phone: staff.phone }, order: { column: "created_at", ascending: false }, limit: 40 });
-  return msgs.reverse().map((m) => ({ id: m.id, direction: m.direction, body: m.body, kind: m.kind, created_at: m.created_at }));
+export async function loadConversationAction() {
+  return webConversation(await webAgentContext());
 }
 
 export async function runEvalsAction() {

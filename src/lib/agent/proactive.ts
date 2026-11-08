@@ -76,14 +76,14 @@ export async function sendDailyBrief(db: Db, now: Date) {
     let body = "";
     if (hasOpenAI) {
       try {
-        const { message } = await chat(
+        const { text } = await chat(
           [
             { role: "system", content: "Eres Rhino, asistente de una empresa de grúas. Escribe el resumen matutino de WhatsApp en español de México: saludo con el nombre, 4 a 7 viñetas '•' priorizando lo urgente, *negritas* en grúas y cifras. Usa EXCLUSIVAMENTE los datos proporcionados; no inventes ni agregues cifras. Máximo 900 caracteres." },
             { role: "user", content: `Destinatario: ${s.full_name} (${s.role}).\nFecha: ${fmt.long(now)}.\nDatos:\n${facts}` },
           ],
           [],
         );
-        body = message.content?.trim() ?? "";
+        body = text.trim();
       } catch (e) {
         console.error("[brief]", e);
       }

@@ -1,4 +1,4 @@
-import type { TableName, Tables, MaintenanceOrder, Inspection, InspectionItem } from "@/lib/types";
+import type { TableName, Tables, MaintenanceOrder, Inspection, InspectionItem, PendingAction } from "@/lib/types";
 
 export type Scalar = string | number | boolean | null;
 
@@ -30,6 +30,13 @@ export interface Db {
   insert<T extends TableName>(table: T, row: Partial<Tables[T]>): Promise<Tables[T]>;
   insertMany<T extends TableName>(table: T, rows: Partial<Tables[T]>[]): Promise<Tables[T][]>;
   update<T extends TableName>(table: T, id: string, patch: Partial<Tables[T]>): Promise<Tables[T]>;
+  /** Atomic status transition: null means another request changed or claimed the proposal. */
+  updatePendingAction(
+    id: string,
+    expectedStatus: PendingAction["status"],
+    patch: Partial<Pick<PendingAction, "status" | "resolved_at" | "result">>,
+    guard?: { staffId?: string; unexpiredAt?: string },
+  ): Promise<PendingAction | null>;
   remove<T extends TableName>(table: T, id: string): Promise<void>;
   upload(bucket: Bucket, path: string, file: StoredFile): Promise<void>;
   download(bucket: Bucket, path: string): Promise<StoredFile | null>;

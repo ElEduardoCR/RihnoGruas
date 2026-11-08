@@ -1,115 +1,200 @@
 "use client";
 
+import { useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { Boxes, CalendarDays, ClipboardCheck, FolderCog, LayoutGrid, LogOut, MessageCircle, UserRound } from "lucide-react";
+import { Boxes, CalendarDays, ClipboardCheck, FolderCog, LayoutGrid, LogOut, Menu, MessageSquare, Settings2, UserRound, X } from "lucide-react";
 import { signOutAction } from "@/app/actions";
 import { CraneIcon, RhinoMark } from "./brand";
 import { cx } from "./ui";
 
-const NAV = [
-  { href: "/", label: "Dashboard", icon: LayoutGrid },
+const ERP_NAV = [
+  { href: "/resumen", label: "Resumen", icon: LayoutGrid },
   { href: "/calendario", label: "Calendario", icon: CalendarDays },
   { href: "/gruas", label: "Flota y equipos", icon: CraneIcon },
   { href: "/inventario", label: "Inventario", icon: Boxes },
   { href: "/checklists", label: "Checklists", icon: ClipboardCheck },
-  { href: "/agente", label: "Agente Rhino", icon: MessageCircle },
   { href: "/catalogos", label: "Catálogos", icon: FolderCog },
 ];
 
+const focusClass = "outline-none focus-visible:ring-2 focus-visible:ring-rhino-500 focus-visible:ring-offset-2";
+const navClass = "flex min-h-11 items-center gap-3 rounded-xl px-3 py-2.5 text-[14px] transition-colors";
+
 function isActive(pathname: string, href: string) {
-  return href === "/" ? pathname === "/" : pathname.startsWith(href);
+  return pathname === href || (href !== "/" && pathname.startsWith(`${href}/`));
 }
 
-type Mode = { demo: boolean; whatsapp: boolean; ai: boolean };
+export type AppMode = { demo: boolean; whatsapp: boolean; ai: boolean };
 
-export function Sidebar({ mode }: { mode: Mode }) {
-  return <SidebarView mode={mode} pathname={usePathname()} />;
-}
+type NavigationProps = { mode: AppMode; pathname: string; onNavigate?: () => void };
 
-/** Vista pura (sirve también de fallback mientras se resuelve la ruta). */
-export function SidebarView({ mode, pathname }: { mode: Mode; pathname: string }) {
+function Navigation({ mode, pathname, onNavigate }: NavigationProps) {
   return (
-    <aside className="sticky top-0 hidden h-dvh w-[248px] shrink-0 flex-col bg-night px-3 py-5 text-white lg:flex">
-      <Link href="/" className="mb-8 flex items-center gap-3 px-3">
-        <RhinoMark />
-        <div className="leading-tight">
-          <div className="font-display text-[17px] font-semibold tracking-tight">Rhino</div>
-          <div className="text-[12px] text-white/50">Gestión de flotilla</div>
+    <>
+      <nav aria-label="Navegación principal" className="mt-5 space-y-6">
+        <Link
+          href="/"
+          onClick={onNavigate}
+          aria-current={pathname === "/" ? "page" : undefined}
+          className={cx(navClass, focusClass, "font-medium", pathname === "/" ? "bg-white text-ink shadow-[0_1px_4px_rgb(0_0_0/0.06)]" : "text-ink-2 hover:bg-black/[0.04]")}
+        >
+          <MessageSquare className="size-[18px] text-rhino-600" strokeWidth={1.8} aria-hidden />
+          Asistente Rhino
+        </Link>
+        <div>
+          <div className="mb-2 px-3 text-[11px] font-semibold tracking-[0.08em] text-muted uppercase">Tu operación</div>
+          <ul className="space-y-0.5">
+            {ERP_NAV.map(({ href, label, icon: Icon }) => {
+              const active = isActive(pathname, href);
+              return (
+                <li key={href}>
+                  <Link
+                    href={href}
+                    onClick={onNavigate}
+                    aria-current={active ? "page" : undefined}
+                    className={cx(navClass, focusClass, active ? "bg-black/[0.06] font-medium text-ink" : "text-ink-2 hover:bg-black/[0.04] hover:text-ink")}
+                  >
+                    <Icon className="size-[18px] shrink-0" strokeWidth={1.8} aria-hidden />
+                    {label}
+                  </Link>
+                </li>
+              );
+            })}
+          </ul>
         </div>
-      </Link>
-      <nav className="flex flex-col gap-0.5">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
-          return (
-            <Link
-              key={href}
-              href={href}
-              className={cx(
-                "group relative flex h-10 items-center gap-3 rounded-xl px-3 text-[14px] font-medium transition",
-                active ? "bg-white/[0.09] text-white" : "text-white/60 hover:bg-white/[0.05] hover:text-white",
-              )}
-            >
-              {active && <span className="absolute top-2.5 bottom-2.5 left-0 w-[3px] rounded-full bg-rhino-500" />}
-              <Icon className="size-[18px]" strokeWidth={1.8} />
-              {label}
-            </Link>
-          );
-        })}
       </nav>
-      <div className="mt-auto space-y-2">
-        <div className="rounded-2xl bg-white/[0.06] p-4">
-          <div className="flex items-center gap-2 text-[13px] font-medium">
-            <span className={cx("size-2 rounded-full", mode.whatsapp ? "bg-[#25D366]" : "bg-warn-mid")} />
-            WhatsApp {mode.whatsapp ? "conectado" : "simulado"}
+      <div className="mt-auto pt-8">
+        <Link
+          href="/agente"
+          onClick={onNavigate}
+          aria-current={isActive(pathname, "/agente") ? "page" : undefined}
+          className={cx(navClass, focusClass, isActive(pathname, "/agente") ? "bg-black/[0.06] font-medium text-ink" : "text-ink-2 hover:bg-black/[0.04]")}
+        >
+          <Settings2 className="size-[18px]" strokeWidth={1.8} aria-hidden />
+          Centro del agente
+        </Link>
+        <div className="mx-3 mt-4 border-t border-black/[0.07] pt-4 text-[12px] text-muted">
+          <div className="flex items-center gap-2">
+            <span className={cx("size-1.5 rounded-full", mode.whatsapp ? "bg-ok" : "bg-muted")} aria-hidden />
+            WhatsApp {mode.whatsapp ? "configurado" : "sin configurar"}
           </div>
-          <p className="mt-1 text-[12px] leading-snug text-white/50">
-            {mode.ai ? "El agente responde y decide con IA." : "Sin OPENAI_API_KEY: el agente usa respuestas por reglas."}
-          </p>
+          <div className="mt-1.5 pl-3.5">{mode.ai ? "Asistencia con IA" : "Asistente básico"}</div>
         </div>
         {mode.demo ? (
-          <div className="rounded-2xl border border-rhino-500/40 bg-rhino-500/10 px-4 py-3 text-[12px] leading-snug text-white/80">
-            <span className="font-semibold text-rhino-400">Modo demo.</span> Datos en memoria. Configura Supabase para producción.
+          <div className="mx-3 mt-4 rounded-lg bg-white px-3 py-2.5 text-[12px] leading-relaxed text-muted">
+            <span className="block font-medium text-ink-2">Modo demostración</span>
+            Los cambios son de prueba.
           </div>
         ) : (
-          <div>
-            <Link href="/cuenta" className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-[13px] text-white/50 hover:bg-white/5 hover:text-white">
-              <UserRound className="size-4" /> Mi cuenta
+          <div className="mt-3">
+            <Link href="/cuenta" onClick={onNavigate} className={cx(navClass, focusClass, "text-ink-2 hover:bg-black/[0.04]")}>
+              <UserRound className="size-[18px]" strokeWidth={1.8} aria-hidden /> Mi cuenta
             </Link>
             <form action={signOutAction}>
-              <button className="flex h-9 w-full items-center gap-2 rounded-xl px-3 text-[13px] text-white/50 hover:bg-white/5 hover:text-white">
-                <LogOut className="size-4" /> Cerrar sesión
+              <button type="submit" className={cx(navClass, focusClass, "w-full text-ink-2 hover:bg-black/[0.04]")}>
+                <LogOut className="size-[18px]" strokeWidth={1.8} aria-hidden /> Cerrar sesión
               </button>
             </form>
           </div>
         )}
       </div>
+    </>
+  );
+}
+
+function Brand({ onNavigate }: { onNavigate?: () => void }) {
+  return (
+    <Link href="/" onClick={onNavigate} className={cx("flex w-fit items-center gap-2.5 rounded-lg", focusClass)} aria-label="Rhino, ir al asistente">
+      <RhinoMark className="size-8" />
+      <div className="leading-tight">
+        <div className="font-display text-[18px] font-semibold tracking-tight">Rhino</div>
+        <div className="mt-0.5 text-[11px] text-muted">Tu equipo, conectado.</div>
+      </div>
+    </Link>
+  );
+}
+
+export function Sidebar({ mode }: { mode: AppMode }) {
+  return <SidebarView mode={mode} pathname={usePathname()} />;
+}
+
+export function SidebarView({ mode, pathname }: NavigationProps) {
+  return (
+    <aside className="sticky top-0 hidden h-dvh w-[252px] shrink-0 flex-col overflow-y-auto border-r border-black/[0.04] bg-[#f6f6f7] px-3 py-6 lg:flex">
+      <div className="px-3"><Brand /></div>
+      <Navigation mode={mode} pathname={pathname} />
     </aside>
   );
 }
 
-export function MobileNav() {
-  return <MobileNavView pathname={usePathname()} />;
+export function MobileNav({ mode }: { mode: AppMode }) {
+  return <MobileNavView mode={mode} pathname={usePathname()} />;
 }
 
-export function MobileNavView({ pathname }: { pathname: string }) {
+export function MobileNavView({ mode, pathname }: NavigationProps) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const [open, setOpen] = useState(false);
+  const close = () => dialogRef.current?.close();
+
+  useEffect(() => {
+    if (!open) return;
+    const previousOverflow = document.body.style.overflow;
+    document.body.style.overflow = "hidden";
+    const desktop = window.matchMedia("(min-width: 1024px)");
+    const closeOnDesktop = () => {
+      if (desktop.matches) dialogRef.current?.close();
+    };
+    desktop.addEventListener("change", closeOnDesktop);
+    return () => {
+      document.body.style.overflow = previousOverflow;
+      desktop.removeEventListener("change", closeOnDesktop);
+    };
+  }, [open]);
+
   return (
     <>
-      <header className="sticky top-0 z-30 flex h-14 items-center gap-3 border-b border-black/5 bg-white/80 px-4 backdrop-blur-xl lg:hidden">
-        <RhinoMark className="size-8" />
-        <span className="font-display text-[17px] font-semibold">Rhino</span>
+      <header className="sticky top-0 z-30 flex h-14 shrink-0 items-center gap-2 border-b border-black/[0.06] bg-white px-3 lg:hidden">
+        <button
+          type="button"
+          aria-label="Abrir menú"
+          aria-controls="mobile-navigation"
+          aria-expanded={open}
+          onClick={() => {
+            dialogRef.current?.showModal();
+            setOpen(true);
+          }}
+          className={cx("grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-canvas", focusClass)}
+        >
+          <Menu className="size-5" strokeWidth={1.8} aria-hidden />
+        </button>
+        <Link href="/" className={cx("flex items-center gap-2 rounded-lg", focusClass)} aria-label="Rhino, ir al asistente">
+          <RhinoMark className="size-7" />
+          <span className="font-display text-[17px] font-semibold">Rhino</span>
+        </Link>
       </header>
-      <nav className="fixed inset-x-0 bottom-0 z-30 grid grid-cols-7 border-t border-black/5 bg-white/90 pb-[env(safe-area-inset-bottom)] backdrop-blur-xl lg:hidden">
-        {NAV.map(({ href, label, icon: Icon }) => {
-          const active = isActive(pathname, href);
-          return (
-            <Link key={href} href={href} className={cx("flex flex-col items-center gap-0.5 py-2 text-[10px] font-medium", active ? "text-rhino-600" : "text-muted")}>
-              <Icon className="size-5" strokeWidth={1.8} />
-              <span className="truncate">{label.replace("Agente ", "")}</span>
-            </Link>
-          );
-        })}
-      </nav>
+      <dialog
+        ref={dialogRef}
+        id="mobile-navigation"
+        aria-label="Menú principal"
+        className="fixed inset-y-0 left-0 m-0 h-dvh max-h-none w-[min(86vw,320px)] max-w-none border-0 bg-[#f6f6f7] p-0 text-ink shadow-xl"
+        style={{ animation: "none" }}
+        onClose={() => setOpen(false)}
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) close();
+        }}
+      >
+        <div className="flex min-h-full flex-col px-3 pt-4 pb-[max(1.5rem,env(safe-area-inset-bottom))]">
+          <div className="flex items-center justify-between gap-2 px-3">
+            <Brand onNavigate={close} />
+            <button type="button" autoFocus onClick={close} aria-label="Cerrar menú" className={cx("grid size-11 shrink-0 place-items-center rounded-xl text-ink-2 hover:bg-black/[0.04]", focusClass)}>
+              <X className="size-5" aria-hidden />
+            </button>
+          </div>
+          <Navigation mode={mode} pathname={pathname} onNavigate={close} />
+        </div>
+      </dialog>
     </>
   );
 }

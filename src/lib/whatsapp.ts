@@ -53,8 +53,8 @@ export function markRead(messageId: string) {
 
 /** Valida X-Hub-Signature-256 con el App Secret de Meta. */
 export function verifySignature(rawBody: string, header: string | null): boolean {
-  if (!env.waAppSecret) return true; // sin secreto configurado (desarrollo)
-  if (!header?.startsWith("sha256=")) return false;
+  // El endpoint es público: sin App Secret no se puede autenticar a Meta.
+  if (!env.waAppSecret || !header || !/^sha256=[a-fA-F0-9]{64}$/.test(header)) return false;
   const expected = createHmac("sha256", env.waAppSecret).update(rawBody).digest("hex");
   const a = Buffer.from(header.slice(7), "hex");
   const b = Buffer.from(expected, "hex");

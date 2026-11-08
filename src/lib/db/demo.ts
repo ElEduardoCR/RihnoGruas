@@ -138,6 +138,17 @@ export function demoDb(): Db {
       return clone(list[i]);
     },
 
+    async updatePendingAction(id, expectedStatus, patch, guard) {
+      const list = rows("agent_pending_actions");
+      const i = list.findIndex((row) => row.id === id && row.status === expectedStatus
+        && (!guard?.staffId || row.staff_id === guard.staffId)
+        && (!guard?.unexpiredAt || Date.parse(row.expires_at) > Date.parse(guard.unexpiredAt)));
+      if (i < 0) return null;
+      // No await entre la comparación y la escritura: una sola solicitud puede reclamarla.
+      list[i] = { ...list[i], ...patch };
+      return clone(list[i]);
+    },
+
     async remove(table, id) {
       const list = rows(table);
       const i = list.findIndex((x) => (x as { id: string }).id === id);

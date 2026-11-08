@@ -90,6 +90,25 @@ dialog[open] {
   animation: pop 180ms cubic-bezier(0.2, 0.8, 0.2, 1);
 }
 
+:where(a, button, summary, select, input, textarea):focus-visible {
+  outline: 2px solid var(--color-rhino-600);
+  outline-offset: 3px;
+}
+
+/* El compositor señala el foco con el borde de su contenedor completo. */
+#rhino-message:focus-visible {
+  outline: none;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  *, *::before, *::after {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+    scroll-behavior: auto !important;
+  }
+}
+
 @keyframes pop {
   from {
     opacity: 0;

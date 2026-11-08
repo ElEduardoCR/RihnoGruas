@@ -1,14 +1,26 @@
 // Configuración central. Sin Supabase configurado, la app corre en modo demo
 // (datos en memoria generados en src/lib/demo/seed.ts).
 
+const reasoningEfforts = ["none", "minimal", "low", "medium", "high", "xhigh", "max"] as const;
+type ReasoningEffort = (typeof reasoningEfforts)[number];
+
+function readReasoningEffort(): ReasoningEffort {
+  const value = process.env.OPENAI_REASONING_EFFORT || "max";
+  if (!reasoningEfforts.includes(value as ReasoningEffort)) {
+    throw new Error("OPENAI_REASONING_EFFORT debe ser none, minimal, low, medium, high, xhigh o max.");
+  }
+  return value as ReasoningEffort;
+}
+
 export const env = {
   supabaseUrl: process.env.NEXT_PUBLIC_SUPABASE_URL ?? "",
   supabaseAnonKey: process.env.NEXT_PUBLIC_SUPABASE_ANON_KEY ?? "",
   supabaseServiceKey: process.env.SUPABASE_SERVICE_ROLE_KEY ?? "",
 
   openaiKey: process.env.OPENAI_API_KEY ?? "",
-  openaiModel: process.env.OPENAI_MODEL || "gpt-5-mini",
-  openaiVisionModel: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-5-mini",
+  openaiModel: process.env.OPENAI_MODEL || "gpt-6-luna",
+  openaiVisionModel: process.env.OPENAI_VISION_MODEL || process.env.OPENAI_MODEL || "gpt-6-luna",
+  openaiReasoningEffort: readReasoningEffort(),
   openaiEmbeddingModel: process.env.OPENAI_EMBEDDING_MODEL || "text-embedding-3-small",
 
   waToken: process.env.WHATSAPP_TOKEN ?? "",

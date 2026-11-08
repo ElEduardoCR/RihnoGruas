@@ -3,13 +3,13 @@ import { connection } from "next/server";
 import { BookOpen, Database, FlaskConical, Hand, MessagesSquare, ShieldCheck, Wrench } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { env, hasOpenAI, hasWhatsApp, isDemo } from "@/lib/env";
-import { ROLE_LABELS } from "@/lib/labels";
 import { fmt } from "@/lib/time";
 import { Badge, Card, CardHeader, PageHeader, PageSkeleton, cx } from "@/components/ui";
-import { AgentChat } from "@/components/agent-chat";
+import { currentStaff } from "@/lib/auth";
+import { LinkButton } from "@/components/ui";
 import { AgentActions, EvalRunner } from "@/components/agent-ops";
 
-export const metadata = { title: "Agente Rhino" };
+export const metadata = { title: "Centro del agente" };
 
 export default function AgentPage() {
   return (
@@ -22,18 +22,15 @@ export default function AgentPage() {
 async function Agent() {
   await connection();
   const db = await getDb();
+  const me = await currentStaff(db);
+  if (!me?.active || !["direccion", "administracion"].includes(me.role)) return (
+    <PageHeader title="Centro del agente" subtitle="La configuración y la bitácora del equipo están disponibles para Dirección y Administración." actions={<LinkButton href="/">Hablar con Rhino</LinkButton>} />
+  );
   const [staff, runs, alerts] = await Promise.all([
     db.select("staff", { eq: { active: true }, order: { column: "full_name" } }),
     db.select("agent_runs", { order: { column: "created_at", ascending: false }, limit: 40 }),
     db.select("alerts", { order: { column: "created_at", ascending: false }, limit: 12 }),
   ]);
-  const withPhone = staff.filter((s) => s.phone);
-  const director = withPhone.find((s) => s.role === "direccion") ?? withPhone[0];
-  const initial = director
-    ? (await db.select("wa_messages", { eq: { phone: director.phone! }, order: { column: "created_at", ascending: false }, limit: 40 }))
-        .reverse()
-        .map((m) => ({ id: m.id, direction: m.direction, body: m.body, kind: m.kind, created_at: m.created_at }))
-    : [];
   const chats = runs.filter((r) => r.trigger !== "eval").slice(0, 12);
   const lastEval = runs.find((r) => r.trigger === "eval");
   const staffName = new Map(staff.map((s) => [s.id, s.full_name]));
@@ -41,19 +38,12 @@ async function Agent() {
   return (
     <>
       <PageHeader
-        title="Agente Rhino"
-        subtitle="Rhino atiende al equipo por WhatsApp, decide qué es importante y lo avisa sin que se lo pidan. Aquí puedes probarlo y auditar cada decisión."
+        title="Centro del agente"
+        subtitle="Revisa las operaciones de Rhino, su configuración y los avisos al equipo."
+        actions={<LinkButton href="/">Hablar con Rhino</LinkButton>}
       />
       <div className="grid grid-cols-1 gap-6 xl:grid-cols-[minmax(0,1fr)_400px]">
         <div className="space-y-6">
-          {director && (
-            <AgentChat
-              staff={withPhone.map((s) => ({ id: s.id, label: `${s.full_name} · ${ROLE_LABELS[s.role]}` }))}
-              defaultStaffId={director.id}
-              initial={initial}
-            />
-          )}
-
           <Card>
             <CardHeader title="Bitácora de decisiones" subtitle="Cada mensaje queda registrado con las herramientas que usó: auditoría y base para evaluar y afinar el modelo." />
             <ul className="divide-y divide-line px-5 pt-2 pb-3 sm:px-6">
@@ -87,8 +77,8 @@ async function Agent() {
           <Card className="p-5 sm:p-6">
             <h2 className="text-[17px] font-semibold">Estado</h2>
             <ul className="mt-4 space-y-3 text-[14px]">
-              <Status ok={hasWhatsApp} label="WhatsApp Cloud API" detail={hasWhatsApp ? "Conectado" : "Simulado: configura WHATSAPP_TOKEN y WHATSAPP_PHONE_NUMBER_ID"} />
-              <Status ok={hasOpenAI} label="Modelo de IA" detail={hasOpenAI ? env.openaiModel : "Sin OPENAI_API_KEY: respuestas por reglas"} />
+              <Status ok={hasWhatsApp && Boolean(env.waVerifyToken && env.waAppSecret)} label="WhatsApp Cloud API" detail={hasWhatsApp && env.waVerifyToken && env.waAppSecret ? "Credenciales configuradas; verifica la entrega con un mensaje de prueba" : "Pendiente de configurar"} />
+              <Status ok={hasOpenAI} label="Modelo de IA" detail={hasOpenAI ? env.openaiModel : "Modo consulta; activa la IA para ejecutar operaciones por chat"} />
               <Status ok={!isDemo} label="Base de datos" detail={isDemo ? "Demo en memoria" : "Supabase"} />
             </ul>
             <div className="mt-4 rounded-2xl bg-canvas p-3 text-[12px] text-muted">
@@ -117,7 +107,7 @@ async function Agent() {
               <li className="flex gap-3"><ShieldCheck className="mt-0.5 size-4 shrink-0 text-rhino-400" /><span><b className="text-white">Reglas deterministas</b> para lo crítico: disponibilidad, documentos, operadores, antirrobo y la revisión antes de cada renta las decide el código, no el modelo.</span></li>
               <li className="flex gap-3"><Hand className="mt-0.5 size-4 shrink-0 text-rhino-400" /><span><b className="text-white">Humano en el ciclo:</b> todo cambio requiere un “SÍ”. Si hay duda, pregunta o escala a Dirección.</span></li>
               <li className="flex gap-3"><FlaskConical className="mt-0.5 size-4 shrink-0 text-rhino-400" /><span><b className="text-white">Evaluaciones</b> con 24 casos de referencia para medir cada cambio de prompt o modelo.</span></li>
-              <li className="flex gap-3"><MessagesSquare className="mt-0.5 size-4 shrink-0 text-rhino-400" /><span><b className="text-white">Bitácora completa</b> de entradas, herramientas y respuestas: base para afinar (fine-tuning) cuando haya 50+ ejemplos buenos.</span></li>
+              <li className="flex gap-3"><MessagesSquare className="mt-0.5 size-4 shrink-0 text-rhino-400" /><span><b className="text-white">Bitácora de operaciones</b> con solicitudes, acciones y respuestas para revisar lo que ocurrió.</span></li>
             </ul>
           </Card>
 

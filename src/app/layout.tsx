@@ -7,11 +7,11 @@ const inter = Inter({ variable: "--font-inter", subsets: ["latin"], display: "sw
 
 export const metadata: Metadata = {
   title: { default: "Grúas Rhino", template: "%s · Grúas Rhino" },
-  description: "Gestión de flotilla de grúas administrada por el agente Rhino vía WhatsApp.",
+  description: "Administra tu flotilla con Rhino: un asistente que te guía y ejecuta operaciones desde el chat y WhatsApp.",
 };
 
 export const viewport: Viewport = {
-  themeColor: "#0b0b0c",
+  themeColor: "#f6f6f7",
   width: "device-width",
   initialScale: 1,
 };

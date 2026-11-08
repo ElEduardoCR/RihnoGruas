@@ -62,6 +62,7 @@ function fixture() {
       return order;
     },
     async remove() { throw new Error("Unexpected removal"); },
+    async updatePendingAction() { throw new Error("Unexpected agent action transition"); },
     async upload() { throw new Error("Unexpected upload"); },
     async download() { throw new Error("Unexpected download"); },
   };

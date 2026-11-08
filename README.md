@@ -1,6 +1,6 @@
 # Grúas Rhino · Gestión de flotilla con agente IA por WhatsApp
 
-Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión grúa articulada) y grúas armables en sitio** (torre y oruga de celosía). La idea central: el equipo **no tiene que entrar a la web**. **Rhino**, un agente de IA, atiende por WhatsApp, toma decisiones de agenda, vigila documentos, almacén y revisiones, y **avisa lo importante aunque nadie lo pregunte**. La web queda como tablero de control y auditoría.
+Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión grúa articulada) y grúas armables en sitio** (torre y oruga de celosía). **Rhino**, un agente de IA, es la entrada principal al ERP: el usuario explica lo que necesita, Rhino consulta datos y permisos, pide lo que falta y ejecuta las acciones disponibles desde el chat. Los módulos siguen accesibles en el menú izquierdo. El mismo agente atiende por WhatsApp y vigila documentos, almacén, agenda y revisiones.
 
 **Stack:** Next.js 16 (App Router, Cache Components) · TypeScript · Tailwind CSS v4 · Supabase (Postgres + Auth + Storage + pgvector) · OpenAI (function calling, visión, embeddings) · WhatsApp Cloud API · Vercel (hosting + cron).
 
@@ -10,13 +10,14 @@ Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión gr�
 
 | Módulo | Qué hace |
 |---|---|
-| **Dashboard** | “Rhino te informa” (los hallazgos que también llegan por WhatsApp), KPIs de la flotilla, línea de tiempo de la semana por grúa, gasto mensual y por categoría y grúa, grúas detenidas con lo que dejan de facturar, últimas compras, próximas revisiones y estado del almacén. |
+| **Chat Rhino · `/`** | Conversación principal para pedir acciones sin conocer los módulos. Sugerencias para empezar, consulta de capacidades según el rol, datos y validaciones reales, confirmación de cambios y resultado de la ejecución. |
+| **Resumen · `/resumen`** | “Rhino te informa” (los hallazgos que también llegan por WhatsApp), KPIs de la flotilla, línea de tiempo de la semana por grúa, gasto mensual y por categoría y grúa, grúas detenidas con lo que dejan de facturar, últimas compras, próximas revisiones y estado del almacén. |
 | **Calendario** | Vista mensual con el estado de **cada grúa cada día** (disponible, rentada, mantenimiento, detenida y revisiones), panel del día y línea de tiempo de dos semanas. |
 | **Grúas** | Catálogo filtrable y **expediente detallado**: ficha técnica, documentos con vigencia (seguro, tarjeta de circulación, verificación, permiso SCT, certificación…), operadores aprobados con estado de licencia, agenda, revisiones, puntos propios de revisión, mantenimiento, consumo de almacén y gastos. |
 | **Inventario** | Insumos **generales** (aceites, consumibles) y refacciones **específicas por grúa** (compatibilidad). Libro de movimientos inmutable, conteos cíclicos, compras y **controles antirrobo** (ver abajo). |
 | **Checklists** | Revisiones tipo **wizard** (un punto a la vez, foto obligatoria) que el operador abre desde un enlace de WhatsApp. **Personalizadas por grúa** y con **calidad de llenado** medida. |
 | **Catálogos** | Alta y edición de grúas, clientes, personal (puesto, WhatsApp, avisos, licencia, grúas aprobadas, acceso web) y artículos de almacén (general o específico por grúa, controles antirrobo, existencia inicial). Guía de “Primeros pasos” mientras falten datos. |
-| **Agente Rhino** | Simulador del chat de WhatsApp, bitácora de decisiones (cada herramienta que usó), alertas enviadas, escaneo proactivo manual y **evaluación de precisión** con 24 casos. |
+| **Actividad del agente · `/agente`** | Bitácora de decisiones (cada herramienta que usó), alertas enviadas, escaneo proactivo manual y **evaluación de precisión** con 24 casos. |
 
 ### Decisiones que Rhino toma solo
 - **Renta creada → revisión total agendada** el día anterior a las 9:00 (o lo antes posible, nunca antes de las 6:00) y **recepción post-renta** al regreso. Le envía el enlace al operador.
@@ -51,10 +52,10 @@ Sistema de gestión para una flotilla de **grúas móviles, Titanes (camión gr�
 WhatsApp ──▶ /api/whatsapp (firma Meta, deduplicación, after())
                  │
                  ▼
-            runAgent()  ── ¿"SÍ"/"NO" a una acción pendiente? ──▶ ejecuta / cancela (determinista)
+Chat web ──▶ runAgent()  ── ¿"SÍ"/"NO" a una acción pendiente? ──▶ ejecuta / cancela (determinista)
                  │
                  ▼
-        OpenAI (function calling, strict) ◀──▶ 20 herramientas (lectura y escritura)
+        OpenAI (function calling, strict) ◀──▶ herramientas (lectura y escritura)
                  │                                    │
                  │                                    ▼
                  │                     servicios de negocio + reglas (rentas, revisiones,
@@ -65,10 +66,13 @@ WhatsApp ──▶ /api/whatsapp (firma Meta, deduplicación, after())
 Vercel Cron ──▶ /api/cron/brief (7:00) y /api/cron/scan ──▶ hallazgos ──▶ alertas por WhatsApp
 ```
 
-- **Herramientas de lectura**: flota, expediente, disponibilidad, agenda, inventario, alertas de almacén, gastos, vencimientos, revisiones, operadores, políticas (RAG) y reenvío de revisión.
-- **Herramientas de escritura**: crear renta, programar revisión (con puntos extra que el modelo justifica), reportar detención, liberar grúa, programar mantenimiento, salida de almacén, autorizar/rechazar salida y registrar compra. **Nunca se ejecutan sin un “SÍ”**: la herramienta valida y prepara un resumen; el cambio ocurre hasta la confirmación.
-- **Permisos por rol** (dirección, administración, ventas, mecánico, almacén, operador). Números no registrados no pueden usar el bot.
+- **Guía desde el chat**: Rhino identifica la intención y consulta las capacidades disponibles para el rol; busca los datos existentes antes de preguntarlos. Si falta información, la pide en lenguaje sencillo. Si una acción no está disponible o incumple una regla, explica el impedimento y el siguiente paso, sin afirmar que la ejecutó.
+- **Herramientas de lectura**: capacidades del agente, flota, expediente, disponibilidad, agenda, inventario, alertas de almacén, gastos, vencimientos, revisiones, operadores, políticas (RAG) y reenvío de revisión.
+- **Herramientas de escritura**: altas de clientes y grúas, crear renta, programar revisión (con puntos extra que el modelo justifica), reportar detención, liberar grúa, programar mantenimiento, salida de almacén, autorizar/rechazar salida y registrar compra. La herramienta valida y prepara un resumen; después de la confirmación, **Rhino ejecuta el cambio** y devuelve el resultado. No envía al usuario a capturar de nuevo en un formulario las acciones que ya puede ejecutar.
+- **Permisos por rol** (dirección, administración, ventas, mecánico, almacén, operador). El chat web usa el usuario autenticado; WhatsApp identifica al personal activo por teléfono. Números no registrados no pueden usar el bot.
 - **Sin `OPENAI_API_KEY`** Rhino responde consultas por reglas con las mismas herramientas (útil para demo o contingencia).
+
+Verificación local: `npm run agent:check` prueba permisos, propuestas y confirmaciones, altas, aislamiento de identidad y firmas de WhatsApp sin llamar a servicios externos. `npm run fleet:check` comprueba los flujos de la flotilla.
 
 ### Precisión según la guía *Optimizing LLM accuracy* de OpenAI
 
@@ -76,8 +80,8 @@ Vercel Cron ──▶ /api/cron/brief (7:00) y /api/cron/scan ──▶ hallazgo
 |---|---|
 | Empezar con prompt engineering: instrucciones claras, pasos, ejemplos | `src/lib/agent/prompt.ts`: rol, fecha/hora CDMX, usuario y rol, pasos de trabajo, estilo WhatsApp y ejemplos few-shot. |
 | Dar contexto/referencia en lugar de confiar en la memoria del modelo (RAG) | Todo dato de la operación sale de **herramientas** sobre la base; políticas internas por **búsqueda vectorial** (pgvector, `match_knowledge`). Se devuelven pocos fragmentos para no meter ruido. |
-| Herramientas externas y dividir tareas | 20 herramientas con esquemas **strict**; la lógica crítica (disponibilidad, documentos, antirrobo, agenda de revisiones) es **código determinista**, el modelo sólo decide qué consultar y cómo explicarlo. |
-| Evaluar con 20+ casos y medir cada cambio | `src/lib/agent/evals.ts`: 24 casos (herramienta correcta, dato clave en la respuesta, pide confirmación). Se corren desde **Agente Rhino → Correr evaluación**. |
+| Herramientas externas y dividir tareas | Herramientas con esquemas **strict**; la lógica crítica (disponibilidad, documentos, antirrobo, agenda de revisiones) es **código determinista**, el modelo sólo decide qué consultar y cómo explicarlo. |
+| Evaluar con 20+ casos y medir cada cambio | `src/lib/agent/evals.ts`: 24 casos (herramienta correcta, dato clave en la respuesta, pide confirmación). Se corren desde **Actividad del agente → Correr evaluación**. |
 | “¿Qué tan preciso es suficiente?”: humano en el ciclo donde el error cuesta | Confirmación obligatoria para cambios, autorizaciones de almacén, preguntar cuando falta un dato y escalar a Dirección si hay riesgo. |
 | Recolectar ejemplos reales para fine-tuning (“prompt baking”) | `agent_runs` guarda entrada, herramientas, respuesta, latencia y calificación: base para un dataset de 50+ ejemplos cuando haga falta afinar. |
 
@@ -111,13 +115,27 @@ Abre http://localhost:3000. Sin variables de Supabase la app arranca en **modo d
 7. Migraciones futuras: `npm run db:status` y `npm run db:push` (toman el ref y la contraseña de `.env.local`).
 
 ### 2. WhatsApp Cloud API (Meta)
-1. En developers.facebook.com crea una app de tipo **Business** y agrega el producto **WhatsApp**.
-2. Registra el número exclusivo del bot y copia el **Phone number ID** y un **token permanente** (usuario de sistema) → `WHATSAPP_PHONE_NUMBER_ID`, `WHATSAPP_TOKEN`.
-3. En **Webhooks** configura la URL `https://TU-DOMINIO/api/whatsapp`, un **Verify token** (el mismo valor en `WHATSAPP_VERIFY_TOKEN`) y suscríbete al campo `messages`. Copia el **App Secret** en `WHATSAPP_APP_SECRET`.
-4. WhatsApp sólo permite mensajes libres dentro de las **24 h** posteriores al último mensaje de la persona. Para las alertas proactivas crea y aprueba una plantilla (categoría *Utility*) con un parámetro, por ejemplo `rhino_alerta`: “Rhino: {{1}}”, y ponla en `WHATSAPP_ALERT_TEMPLATE`. Rhino usa la plantilla automáticamente fuera de la ventana.
+
+El agente y el webhook ya existen; no hace falta construir otro bot. Empieza conectando un número de prueba al mismo ERP:
+
+1. Abre la [guía de inicio de Meta](https://developers.facebook.com/documentation/business-messaging/whatsapp/get-started), crea o selecciona tu app y configura WhatsApp para tu negocio. Comienza con el número de prueba y los destinatarios de prueba que permita tu cuenta.
+2. Publica la aplicación con HTTPS, base persistente y `APP_URL=https://TU-DOMINIO`. La URL del webhook debe ser accesible para Meta; un `localhost` sin acceso público no sirve.
+3. Guarda en el servidor `WHATSAPP_PHONE_NUMBER_ID` (ID del número, no el número telefónico), `WHATSAPP_TOKEN` (token de acceso) y `WHATSAPP_APP_SECRET` (secreto de la app). Para producción, sustituye el token temporal por uno de usuario de sistema con acceso a la cuenta de WhatsApp y permisos de mensajería/gestión; revisa la vigencia que Meta indique al generarlo. No compartas estas claves en el chat ni las pongas en variables `NEXT_PUBLIC_`.
+4. Elige `WHATSAPP_VERIFY_TOKEN` y configura en Meta el callback `https://TU-DOMINIO/api/whatsapp` con ese mismo valor. El Verify token autentica el registro inicial; el App Secret valida cada mensaje posterior. **Sin App Secret el webhook rechaza los mensajes**, incluso en desarrollo.
+5. Suscríbete al campo `messages` y comprueba que la app esté suscrita a tu WhatsApp Business Account (WABA). Meta documenta `POST /{WABA-ID}/subscribed_apps` en su [colección oficial de Cloud API](https://www.postman.com/meta/whatsapp-business-platform/documentation/wlk6lh4/whatsapp-cloud-api?entity=folder-13382743-148258e1-3240-4eed-8a78-049bb1d1fe25). Verificar la URL por sí solo no comprueba que lleguen mensajes reales.
+6. Configura `OPENAI_API_KEY` para la conversación con IA y registra tu teléfono y rol en **Catálogos → Personal**. Envía desde ese teléfono una consulta como “¿Qué puedes hacer por mí?”; después prueba una acción sobre datos de prueba, confirma el resumen y verifica el resultado y su bitácora en el ERP.
+7. Para avisos fuera de la ventana de atención de 24 h, configura una plantilla aprobada con un parámetro `{{1}}` mediante `WHATSAPP_ALERT_TEMPLATE`, y su idioma exacto en `WHATSAPP_TEMPLATE_LANG` (por defecto `es_MX`). El envío de alertas depende de esa aprobación y de la configuración de Meta; no queda activado sólo por guardar el nombre de una plantilla.
+
+**Alcance actual:** el chat web y WhatsApp usan el mismo motor y permisos, con conversaciones separadas. Sin `OPENAI_API_KEY` hay respuestas por reglas; sin credenciales de WhatsApp los envíos se simulan y no llegan a un teléfono. No hay transcripción de audios ni seguimiento de confirmaciones de entrega de Meta. Las imágenes pueden asociarse a evidencia de almacén; el tratamiento de documentos no sustituye un flujo completo de archivos.
+
+**Antes de ampliar el piloto:** el webhook procesa en segundo plano con `after()` y un límite de 60 segundos; todavía no usa una cola persistente con reintentos. Existe deduplicación por ID de mensaje. Las confirmaciones reclaman la propuesta de forma atómica antes de ejecutarla, para que dos solicitudes simultáneas no repitan la misma operación. Una propuesta que queda `en_proceso` tras una interrupción o `fallida` tras un error requiere revisar los registros antes de solicitar otra operación; no se reintenta automáticamente.
+
+La autenticación del webhook se prueba sin red ni credenciales reales con `npx tsx --test src/lib/whatsapp.test.ts`.
 
 ### 3. OpenAI
-`OPENAI_API_KEY` y `OPENAI_MODEL` (por defecto `gpt-5-mini`). El acceso al modelo está aislado en `src/lib/agent/llm.ts`, así que cambiar de modelo o proveedor sólo toca ese archivo.
+`OPENAI_API_KEY`, `OPENAI_MODEL=gpt-6-luna` y `OPENAI_REASONING_EFFORT=max` son la configuración del agente. Rhino usa la API Responses para combinar razonamiento y herramientas, conservando el contexto entre consultas. El mismo nivel de razonamiento se aplica a las salidas estructuradas y la validación de fotos; `OPENAI_VISION_MODEL` permite elegir otro modelo para visión. El acceso al modelo está aislado en `src/lib/agent/llm.ts`.
+
+El chat web de `/` dispone de hasta 300 segundos para completar sus consultas. Antes de publicar esta versión, aplica las migraciones `agent_atomic_confirmation` y `chat_rls_permissions`: agregan los estados de ejecución y restringen la escritura de propuestas, conversación y auditoría al servidor. El personal sólo puede editarse desde cuentas activas de Dirección o Administración. `supabase/tests/chat_rls_permissions.sql` comprueba estos permisos dentro de una transacción que se revierte.
 
 ### 4. GitHub + Vercel
 1. Sube el repositorio a GitHub e impórtalo en Vercel.
@@ -132,7 +150,7 @@ Abre http://localhost:3000. Sin variables de Supabase la app arranca en **modo d
 ```
 supabase/migrations/      Esquema, RLS, storage y búsqueda vectorial
 scripts/seed.ts           Poblar Supabase (demo o sólo catálogos)
-src/app/(app)/            Web: dashboard, calendario, grúas, inventario, checklists, agente
+src/app/(app)/            Web: chat principal, resumen, calendario, grúas, inventario, checklists, actividad del agente
 src/app/c/[token]/        Wizard de revisión (móvil, acceso por enlace con token)
 src/app/api/whatsapp/     Webhook de WhatsApp
 src/app/api/cron/         Escaneo proactivo y resumen matutino

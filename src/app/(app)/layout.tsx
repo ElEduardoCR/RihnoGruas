@@ -1,19 +1,23 @@
 import { Suspense } from "react";
 import { MobileNav, MobileNavView, Sidebar, SidebarView } from "@/components/app-nav";
-import { hasOpenAI, hasWhatsApp, isDemo } from "@/lib/env";
+import { AppMain, AppMainView } from "@/components/app-shell";
+import { env, hasOpenAI, hasWhatsApp, isDemo } from "@/lib/env";
 
 export default function AppLayout({ children }: { children: React.ReactNode }) {
-  const mode = { demo: isDemo, whatsapp: hasWhatsApp, ai: hasOpenAI };
+  const mode = { demo: isDemo, whatsapp: hasWhatsApp && Boolean(env.waVerifyToken && env.waAppSecret), ai: hasOpenAI };
   return (
     <div className="flex min-h-dvh">
+      <a href="#main-content" className="sr-only fixed top-3 left-3 z-50 rounded-xl bg-ink px-4 py-3 text-white focus:not-sr-only focus:outline-2 focus:outline-offset-2 focus:outline-rhino-500">Ir al contenido</a>
       <Suspense fallback={<SidebarView mode={mode} pathname="" />}>
         <Sidebar mode={mode} />
       </Suspense>
       <div className="min-w-0 flex-1">
-        <Suspense fallback={<MobileNavView pathname="" />}>
-          <MobileNav />
+        <Suspense fallback={<MobileNavView mode={mode} pathname="" />}>
+          <MobileNav mode={mode} />
         </Suspense>
-        <main className="mx-auto w-full max-w-[1400px] px-4 pt-6 pb-28 sm:px-6 lg:px-10 lg:pt-10 lg:pb-12">{children}</main>
+        <Suspense fallback={<AppMainView>{children}</AppMainView>}>
+          <AppMain>{children}</AppMain>
+        </Suspense>
       </div>
     </div>
   );
