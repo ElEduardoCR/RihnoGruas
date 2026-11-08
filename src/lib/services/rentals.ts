@@ -240,7 +240,7 @@ export async function cancelRental(db: Db, rentalId: string, expected?: Record<s
     : await db.update("rentals", rentalId, { status: "cancelada" });
   if (!rental) throw new RentalError("La renta cambió desde el resumen. Consulta de nuevo y prepara una nueva propuesta antes de cancelarla.");
   const insp = await db.select("inspections", { eq: { rental_id: rentalId }, in: { status: ["programada", "vencida"] } });
-  for (const i of insp) await db.update("inspections", i.id, { status: "cancelada" });
+  for (const i of insp) await db.updateWhere("inspections", i.id, { status: "cancelada" }, { status: i.status });
   return rental;
 }
 

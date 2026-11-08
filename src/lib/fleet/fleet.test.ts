@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { buildFleetPayload } from "./payload";
 import { importConflicts } from "./import-plan";
 import { serviceUsage } from "@/lib/domain/fleet";
-import { createRental, documentIssues, findAvailable, identificationIssue } from "@/lib/services/rentals";
+import { cancelRental, createRental, documentIssues, findAvailable, identificationIssue } from "@/lib/services/rentals";
 import { demoDb } from "@/lib/db/demo";
 
 test("reported identities stay separate; uncertain National chassis do not become extra assets", () => {
@@ -84,6 +84,33 @@ test("GR-03 can store and filter 12 tonnes while its rental restriction stays un
   await assert.rejects(createRental(db, { craneId: crane.id, clientName: "Cliente de prueba", start: from, end: to, createdBy: "agente" }, now), /tabla de cargas/);
   assert.equal((await db.select("rentals", { eq: { crane_id: crane.id } })).length, 0);
   assert.equal((await db.select("inspections", { eq: { crane_id: crane.id } })).length, 0);
+});
+
+test("rental cancellation preserves an inspection completed after the pending list was read", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("This verification must never call a remote service"); });
+  const db = demoDb();
+  const rentalSeed = (await db.select("rentals"))[0];
+  const inspectionSeed = (await db.select("inspections"))[0];
+  assert.ok(rentalSeed && inspectionSeed);
+  const rental = await db.insert("rentals", { ...rentalSeed, id: crypto.randomUUID(), status: "confirmada" });
+  const finishing = await db.insert("inspections", { ...inspectionSeed, id: crypto.randomUUID(), rental_id: rental.id, status: "programada", completed_at: null });
+  const stillPending = await db.insert("inspections", { ...inspectionSeed, id: crypto.randomUUID(), rental_id: rental.id, status: "vencida", completed_at: null });
+  const completedAt = "2026-11-08T18:00:00.000Z";
+  const select = db.select.bind(db);
+  t.mock.method(db, "select", async (...args: Parameters<typeof db.select>) => {
+    const snapshot = await select(...args);
+    if (args[0] === "inspections" && args[1]?.eq?.rental_id === rental.id) {
+      await db.update("inspections", finishing.id, { status: "completada", completed_at: completedAt });
+    }
+    return snapshot;
+  });
+
+  const cancelled = await cancelRental(db, rental.id, { status: "confirmada" });
+  assert.equal(cancelled.status, "cancelada");
+  const finished = await db.get("inspections", finishing.id);
+  assert.equal(finished?.status, "completada");
+  assert.equal(finished?.completed_at, completedAt);
+  assert.equal((await db.get("inspections", stillPending.id))?.status, "cancelada");
 });
 
 test("each equipment category has compatible inspections and sourced maintenance plans", () => {
