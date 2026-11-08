@@ -9,12 +9,17 @@ import { scheduleInspection, listInspections } from "@/lib/services/inspections"
 import { releaseCrane, reportDowntime, scheduleMaintenance } from "@/lib/services/maintenance";
 import { findMovement, getStock, inventoryWatch, registerPurchase, requestIssue, resolveMovement } from "@/lib/services/inventory";
 import { expenseSummary, latestPurchases } from "@/lib/services/expenses";
-import { assertManager, saveClient, saveCrane, type CraneInput } from "@/lib/services/catalogs";
+import { assertManager, CatalogError, prepareCraneUpdate, saveClient, saveCrane, updateCrane, type CraneInput, type CranePatch } from "@/lib/services/catalogs";
 import { inspectionLink, sendToStaff } from "@/lib/services/notify";
 import { addDays, daysUntil, fmt, money, startOfDay, zonedDate, zonedParts } from "@/lib/time";
 import { searchKnowledge } from "./knowledge";
 import { norm } from "@/lib/text";
 import { flagText, qtyUnit } from "@/lib/labels";
+import { ToolError } from "./tool-error";
+import { CATALOG_EDIT_TOOLS } from "./catalog-tools";
+import { AGENDA_EDIT_TOOLS } from "./agenda-tools";
+
+export { ToolError } from "./tool-error";
 
 export interface ToolCtx {
   db: Db;
@@ -44,8 +49,6 @@ export interface WriteTool extends BaseTool {
   execute(args: Args, ctx: ToolCtx): Promise<{ mensaje: string } & Record<string, unknown>>;
 }
 export type Tool = ReadTool | WriteTool;
-
-export class ToolError extends Error {}
 
 // ---------------------------------------------------------------- esquemas (modo strict)
 const str = (description: string) => ({ type: "string", description });
@@ -82,7 +85,13 @@ function parseWhen(value: unknown, defaultHour: number, label: string): Date {
   return date;
 }
 
-async function craneOrThrow(db: Db, q: unknown) {
+async function craneOrThrow(db: Db, q: unknown, includeInactive = false) {
+  if (includeInactive) {
+    const query = String(q ?? "").trim();
+    const compact = (value: string) => norm(value).replace(/[\s-]+/g, "");
+    const exact = (await db.select("cranes")).filter((crane) => crane.id === query || compact(crane.code) === compact(query));
+    if (exact.length === 1) return exact[0];
+  }
   const c = await findCrane(db, String(q ?? ""));
   if (!c) {
     const all = await db.select("cranes", { eq: { active: true }, order: { column: "code" } });
@@ -113,6 +122,44 @@ async function matchItems(db: Db, query: string) {
 }
 
 const craneLabel = (c: { code: string; name: string }) => `${c.code} ${c.name}`;
+const appLink = (path: string, etiqueta: string) => ({ etiqueta, url: `${env.appUrl}${path}` });
+const craneLink = (c: { id: string; code: string }) => appLink(`/gruas/${encodeURIComponent(c.id)}`, `Abrir ficha de ${c.code}`);
+
+const APP_DESTINATIONS: Record<string, { path: string; label: string; roles?: StaffRole[] }> = {
+  inicio: { path: "/", label: "Abrir asistente Rhino" },
+  flota: { path: "/gruas", label: "Abrir flota y equipos" },
+  calendario: { path: "/calendario", label: "Abrir calendario" },
+  inventario: { path: "/inventario", label: "Abrir inventario" },
+  checklists: { path: "/checklists", label: "Abrir revisiones" },
+  catalogos: { path: "/catalogos", label: "Abrir catálogos", roles: MGMT },
+  clientes: { path: "/catalogos?tab=clientes", label: "Abrir catálogo de clientes", roles: MGMT },
+  personal: { path: "/catalogos?tab=personal", label: "Abrir catálogo de personal", roles: MGMT },
+  articulos: { path: "/catalogos?tab=articulos", label: "Abrir catálogo de artículos", roles: MGMT },
+  resumen: { path: "/resumen", label: "Abrir resumen de la operación", roles: MGMT },
+  agente: { path: "/agente", label: "Abrir centro del agente", roles: MGMT },
+  cuenta: { path: "/cuenta", label: "Abrir mi cuenta" },
+};
+
+const navegarApp: ReadTool = {
+  kind: "read",
+  name: "navegar_app",
+  description: "Obtiene un enlace fiable para abrir una pantalla de Rhino cuando el usuario pide ir, abrir, ver la ficha o 'llévame ahí'. Usa ficha_grua y el código de la unidad mencionada para su expediente. Devuelve etiqueta y URL; no cambia datos ni abre pantallas automáticamente.",
+  parameters: obj({
+    destino: en(["ficha_grua", ...Object.keys(APP_DESTINATIONS)], "Pantalla de Rhino que el usuario quiere abrir"),
+    grua: optStr("Código de la unidad para ficha_grua; null para los módulos generales"),
+  }),
+  async run(a, { db, staff }) {
+    if (!staff.active) throw new ToolError("Necesitas una cuenta activa para abrir las pantallas de Rhino.");
+    if (a.destino === "ficha_grua") {
+      if (typeof a.grua !== "string" || !a.grua.trim()) throw new ToolError("Indica qué unidad quieres abrir, por ejemplo GR-03.");
+      return craneLink(await craneOrThrow(db, a.grua, true));
+    }
+    const destination = typeof a.destino === "string" && Object.hasOwn(APP_DESTINATIONS, a.destino) ? APP_DESTINATIONS[a.destino] : null;
+    if (!destination) throw new ToolError("Esa pantalla no existe en Rhino. Elige flota, calendario, inventario, revisiones o uno de los módulos disponibles.");
+    if (destination.roles && !destination.roles.includes(staff.role)) throw new ToolError("Tu perfil no tiene permiso para abrir ese módulo. Pide acceso a Dirección o Administración.");
+    return appLink(destination.path, destination.label);
+  },
+};
 
 // ---------------------------------------------------------------- herramientas de lectura
 const consultarCapacidades: ReadTool = {
@@ -182,6 +229,8 @@ const consultarGrua: ReadTool = {
     const lastInsp = d.inspections.find((i) => i.status === "completada");
     return {
       grua: craneLabel(c),
+      grua_id: c.id,
+      enlace: craneLink(c),
       tipo: CRANE_TYPE_LABELS[c.type],
       marca_modelo: `${c.brand} ${c.model} ${c.year ?? ""}`.trim(),
       capacidad_t: c.capacity_tons,
@@ -189,7 +238,15 @@ const consultarGrua: ReadTool = {
       placas: c.plates,
       serie: c.serial_number,
       horometro_h: c.hour_meter,
-      ficha_investigada: c.fleet_profile ?? null,
+      ficha_investigada: c.fleet_profile ? {
+        identificacion: c.fleet_profile.identification_status,
+        capacidad_reportada_original: c.fleet_profile.reported_capacity,
+        alcance_reportado_original: c.fleet_profile.reported_reach,
+        pendientes: c.fleet_profile.pending.slice(0, 8),
+        fuentes: c.fleet_profile.sources.slice(0, 5).map(({ title, url }) => ({ titulo: title, url })),
+        planes: c.fleet_profile.maintenance_plans.map(({ id, title }) => ({ id, titulo: title })),
+        aviso: "La investigación conserva lo reportado originalmente; capacidad_t es el dato vigente de la ficha. Ninguno sustituye la tabla de cargas o documentos de la unidad.",
+      } : null,
       servicio: d.service.known ? `${Math.round(d.service.used)} de ${c.service_interval_hours} h usadas desde el último servicio` : "Pendiente: faltan horómetro, historial o intervalo confirmado",
       estado: d.status,
       restriccion_renta: identificationIssue(c),
@@ -429,6 +486,10 @@ const enviarRevision: ReadTool = {
 
 // ---------------------------------------------------------------- herramientas que modifican (con confirmación)
 const textValue = (value: unknown) => typeof value === "string" ? value.trim() || null : null;
+const catalogFailure = (error: unknown): never => {
+  if (error instanceof CatalogError) throw new ToolError(error.message);
+  throw error;
+};
 
 const registrarCliente: WriteTool = {
   kind: "write",
@@ -489,6 +550,103 @@ const registrarGrua: WriteTool = {
     assertManager(staff);
     const crane = await saveCrane(db, a.input as CraneInput);
     return { mensaje: `✅ Unidad *${crane.code} ${crane.name}* registrada. Faltan los documentos y operadores aprobados; el alta por sí sola no acredita que esté lista para trabajar.`, grua_id: crane.id };
+  },
+};
+
+const CRANE_UPDATE_FIELDS: Record<string, { field: keyof CraneInput; label: string; parameter: Schema; clearable?: boolean; unit?: string }> = {
+  codigo: { field: "code", label: "Número económico", parameter: optStr("Nuevo número económico; null conserva el actual") },
+  nombre: { field: "name", label: "Nombre", parameter: optStr("Nuevo nombre de la unidad; null conserva") },
+  tipo: { field: "type", label: "Tipo de unidad", parameter: optEn(CRANE_TYPES, "Nuevo tipo; null conserva") },
+  marca: { field: "brand", label: "Marca", parameter: optStr("Marca proporcionada por el usuario; null conserva") },
+  modelo: { field: "model", label: "Modelo", parameter: optStr("Modelo proporcionado por el usuario; null conserva") },
+  anio: { field: "year", label: "Año", parameter: optNum("Año proporcionado; null conserva"), clearable: true },
+  capacidad_toneladas: { field: "capacity_tons", label: "Capacidad", parameter: optNum("Capacidad en toneladas indicada por Administración; no exige certificarla para registrarla. Null conserva"), clearable: true, unit: "t" },
+  pluma_metros: { field: "boom_length_m", label: "Longitud de pluma", parameter: optNum("Metros de pluma proporcionados; null conserva"), clearable: true, unit: "m" },
+  numero_serie: { field: "serial_number", label: "Número de serie", parameter: optStr("Número de serie; null conserva"), clearable: true },
+  vin: { field: "vin", label: "VIN", parameter: optStr("VIN; null conserva"), clearable: true },
+  placas: { field: "plates", label: "Placas", parameter: optStr("Placas; null conserva"), clearable: true },
+  horometro_horas: { field: "hour_meter", label: "Horómetro", parameter: optNum("Lectura actual en horas; null conserva"), clearable: true, unit: "h" },
+  odometro_km: { field: "odometer_km", label: "Odómetro", parameter: optNum("Lectura actual en kilómetros; null conserva"), clearable: true, unit: "km" },
+  intervalo_servicio_horas: { field: "service_interval_hours", label: "Intervalo de servicio", parameter: optNum("Intervalo en horas indicado por el usuario; null conserva"), clearable: true, unit: "h" },
+  ultimo_servicio_horas: { field: "last_service_hours", label: "Horómetro del último servicio", parameter: optNum("Lectura en horas del último servicio; null conserva"), clearable: true, unit: "h" },
+  ubicacion_base: { field: "base_location", label: "Ubicación base", parameter: optStr("Base de la unidad; null conserva"), clearable: true },
+  tarifa_diaria: { field: "daily_rate", label: "Tarifa diaria", parameter: optNum("Tarifa diaria en MXN; null conserva"), clearable: true, unit: "MXN/día" },
+  fecha_adquisicion: { field: "acquired_on", label: "Fecha de adquisición", parameter: optStr("Fecha real YYYY-MM-DD; null conserva"), clearable: true },
+  notas: { field: "notes", label: "Notas", parameter: optStr("Texto completo de notas que el usuario pidió guardar; null conserva"), clearable: true },
+  activa: { field: "active", label: "Unidad activa", parameter: { type: ["boolean", "null"], description: "true activa, false desactiva; null conserva. Sólo si el usuario lo pide expresamente" } },
+};
+
+function cranePatchFromArgs(a: Args): CranePatch {
+  const allowed = new Set(["grua", "borrar_campos", ...Object.keys(CRANE_UPDATE_FIELDS)]);
+  if (Object.keys(a).some((field) => !allowed.has(field))) throw new ToolError("La solicitud contiene un campo que no se puede editar en la ficha de la unidad.");
+  const entries: [keyof CraneInput, unknown][] = [];
+  for (const [name, spec] of Object.entries(CRANE_UPDATE_FIELDS)) {
+    const value = a[name];
+    if (value == null) continue;
+    if (typeof value === "string" && !value.trim()) throw new ToolError(`${spec.label}: proporciona el dato o solicita explícitamente borrarlo.`);
+    entries.push([spec.field, typeof value === "string" ? value.trim() : value]);
+  }
+  const clear = a.borrar_campos ?? [];
+  if (!Array.isArray(clear)) throw new ToolError("borrar_campos debe ser una lista de campos solicitados expresamente por el usuario.");
+  for (const field of new Set(clear)) {
+    const spec = typeof field === "string" && Object.hasOwn(CRANE_UPDATE_FIELDS, field) ? CRANE_UPDATE_FIELDS[field] : null;
+    if (!spec?.clearable) throw new ToolError(`No se puede borrar el campo ${String(field)}.`);
+    if (a[field as string] != null) throw new ToolError(`${spec.label}: elige entre guardar un valor o borrarlo.`);
+    entries.push([spec.field, null]);
+  }
+  return Object.fromEntries(entries) as CranePatch;
+}
+
+function craneChanges(patch: CranePatch, before: CranePatch) {
+  return Object.values(CRANE_UPDATE_FIELDS).filter((spec) => Object.hasOwn(patch, spec.field)).map((spec) => ({
+    campo: spec.label,
+    antes: before[spec.field] ?? null,
+    despues: patch[spec.field] ?? null,
+    unidad: spec.unit ?? null,
+  }));
+}
+
+const craneValue = (value: unknown, unit: string | null) => value == null ? "pendiente" : typeof value === "boolean" ? (value ? "sí" : "no") : `${value}${unit ? ` ${unit}` : ""}`;
+
+const actualizarGrua: WriteTool = {
+  kind: "write",
+  name: "actualizar_grua",
+  description: "Actualiza datos de una unidad EXISTENTE, por ejemplo 'agrega que GR 03 tiene capacidad de 12 toneladas'. Guarda el dato proporcionado por Dirección/Administración sin exigir documentación para capturarlo. Sólo cambia campos pedidos: null u omitido conserva, borrar_campos sólo borra lo solicitado explícitamente. Presenta antes/después y espera confirmación. No certifica tabla de cargas/documentos ni aprueba inspecciones; conserva investigación y datos no pedidos.",
+  roles: MGMT,
+  parameters: obj({
+    grua: str("Código de la unidad existente, por ejemplo GR 03 o GR-03; también nombre/modelo único"),
+    ...Object.fromEntries(Object.entries(CRANE_UPDATE_FIELDS).map(([name, spec]) => [name, spec.parameter])),
+    borrar_campos: { type: "array", items: en(Object.entries(CRANE_UPDATE_FIELDS).filter(([, spec]) => spec.clearable).map(([name]) => name), "Campo que el usuario solicitó borrar"), description: "[] normalmente. Sólo campos que el usuario pidió explícitamente dejar sin dato" },
+  }),
+  async prepare(a, { db, staff }) {
+    assertManager(staff);
+    const crane = await craneOrThrow(db, a.grua, true);
+    const prepared = await prepareCraneUpdate(db, crane.id, cranePatchFromArgs(a), staff).catch(catalogFailure);
+    const changes = craneChanges(prepared.patch, prepared.before);
+    const link = craneLink(crane);
+    return {
+      summary: [
+        `Actualizar *${craneLabel(crane)}*:`,
+        ...changes.map((change) => `${change.campo}: ${craneValue(change.antes, change.unidad)} → ${craneValue(change.despues, change.unidad)}.`),
+        ...(Object.hasOwn(prepared.patch, "capacity_tons") ? ["La capacidad se registra como dato proporcionado por Administración. Este cambio no certifica la tabla de cargas ni los documentos y no aprueba inspecciones."] : []),
+        "Los demás datos y la investigación de la unidad se conservan.",
+        `[${link.etiqueta}](${link.url})`,
+      ].join("\n"),
+      args: { craneId: crane.id, patch: prepared.patch, before: prepared.before },
+    };
+  },
+  async execute(a, { db, staff }) {
+    assertManager(staff);
+    if (typeof a.craneId !== "string" || !a.craneId) throw new ToolError("La unidad de la propuesta no es válida. Prepara una nueva solicitud.");
+    const crane = await updateCrane(db, a.craneId, a.patch as CranePatch, a.before as CranePatch, staff).catch(catalogFailure);
+    const changes = craneChanges(a.patch as CranePatch, a.before as CranePatch);
+    const link = craneLink(crane);
+    return {
+      mensaje: [`✅ Ficha de *${craneLabel(crane)}* actualizada.`, ...changes.map((change) => `${change.campo}: ${craneValue(change.antes, change.unidad)} → ${craneValue(change.despues, change.unidad)}.`), ...(Object.hasOwn(a.patch as object, "capacity_tons") ? ["Capacidad registrada como dato proporcionado por Administración; no certifica tabla de cargas/documentos ni aprueba inspecciones."] : []), `[${link.etiqueta}](${link.url})`].join("\n"),
+      grua_id: crane.id,
+      enlace: link,
+      cambios: changes,
+    };
   },
 };
 
@@ -783,6 +941,7 @@ const registrarCompra: WriteTool = {
 
 export const TOOLS: Tool[] = [
   consultarCapacidades,
+  navegarApp,
   consultarClientes,
   consultarFlota,
   consultarGrua,
@@ -806,6 +965,9 @@ export const TOOLS: Tool[] = [
   registrarCompra,
   registrarCliente,
   registrarGrua,
+  actualizarGrua,
+  ...CATALOG_EDIT_TOOLS,
+  ...AGENDA_EDIT_TOOLS,
 ];
 
 export function toolsFor(staff: Staff) {

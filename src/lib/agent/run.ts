@@ -7,6 +7,7 @@ import { ToolError, toolByName, toolsFor, type ToolCtx } from "./tools";
 import { assertModelBudget, chat, ModelTimeBudgetError, withModelDeadline, type ChatMessage, type ToolSpec } from "./llm";
 import { collectInsights, type Insight } from "./insights";
 import { fallbackAgent } from "./fallback";
+import { appendAppLink } from "./message-content";
 
 export interface AgentInput {
   phone: string;
@@ -122,6 +123,10 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
       : "Perdón, tuve un problema para procesar tu mensaje. Ya quedó registrado; inténtalo de nuevo o llama a Dirección si es urgente.";
   }
 
+  // El acceso de navegación queda en el mensaje guardado aunque el modelo omita la URL.
+  for (const step of toolCalls) {
+    if (step.name === "navegar_app") reply = appendAppLink(reply, step.result, env.appUrl);
+  }
   await deliver(reply);
   if (persist) {
     await db.insert("agent_runs", {
@@ -176,7 +181,7 @@ async function executePending(db: Db, p: PendingAction, ctx: ToolCtx, log: ToolC
     log.push({ name: `${claimed.tool} (confirmada)`, args: claimed.args, result, ms: Date.now() - t0 });
     const saved = await db.updatePendingAction(claimed.id, "en_proceso", { status: "confirmada", resolved_at: ctx.now.toISOString(), result });
     if (!saved) throw new Error("No se pudo guardar el estado final de la acción.");
-    return result.mensaje;
+    return appendAppLink(result.mensaje, result.enlace ?? result, env.appUrl);
   } catch (e) {
     const msg = e instanceof Error ? e.message : String(e);
     log.push({ name: `${claimed.tool} (confirmada)`, args: claimed.args, result: { error: msg }, ms: Date.now() - t0 });

@@ -1,4 +1,4 @@
-import type { TableName, Tables, MaintenanceOrder, Inspection, InspectionItem, PendingAction } from "@/lib/types";
+import type { TableName, Tables, MaintenanceOrder, Inspection, InspectionItem, PendingAction, InventoryCount } from "@/lib/types";
 
 export type Scalar = string | number | boolean | null;
 
@@ -30,6 +30,8 @@ export interface Db {
   insert<T extends TableName>(table: T, row: Partial<Tables[T]>): Promise<Tables[T]>;
   insertMany<T extends TableName>(table: T, rows: Partial<Tables[T]>[]): Promise<Tables[T][]>;
   update<T extends TableName>(table: T, id: string, patch: Partial<Tables[T]>): Promise<Tables[T]>;
+  /** Atomic comparison and update; null means the expected fields no longer match. */
+  updateWhere<T extends TableName>(table: T, id: string, patch: Partial<Tables[T]>, expected: Record<string, Scalar>): Promise<Tables[T] | null>;
   /** Atomic status transition: null means another request changed or claimed the proposal. */
   updatePendingAction(
     id: string,
@@ -42,6 +44,17 @@ export interface Db {
   download(bucket: Bucket, path: string): Promise<StoredFile | null>;
   /** Creates the order, its checklist and frozen steps in one transaction. */
   createMaintenanceBundle?(bundle: MaintenanceBundle): Promise<MaintenanceOrder>;
+  /** Records a count and its adjustment against the expected stock in one transaction. */
+  createInventoryCountBundle?(input: InventoryCountInput): Promise<InventoryCount>;
+}
+
+export interface InventoryCountInput {
+  itemId: string;
+  countedQty: number;
+  expectedStock: number;
+  expectedUnit: string;
+  countedBy: string | null;
+  notes?: string | null;
 }
 
 export interface MaintenanceBundle {

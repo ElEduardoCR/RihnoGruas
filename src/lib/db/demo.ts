@@ -80,6 +80,29 @@ export function demoDb(): Db {
   return {
     mode: "demo",
 
+    async createInventoryCountBundle(input) {
+      if (!Number.isFinite(input.countedQty) || input.countedQty < 0 || !Number.isFinite(input.expectedStock) || typeof input.expectedUnit !== "string" || !input.expectedUnit.trim()) throw new Error("Conteo o inventario esperado inválido.");
+      const staff = rows("staff").find((person) => person.id === input.countedBy && person.active);
+      if (!staff || !["direccion", "administracion", "almacen"].includes(staff.role)) throw new Error("Sin permiso para registrar este conteo.");
+      const item = rows("inventory_items").find((entry) => entry.id === input.itemId && entry.active);
+      if (!item) throw new Error("Artículo no encontrado o inactivo.");
+      const systemQty = rows("inventory_movements").filter((movement) => movement.item_id === item.id && movement.status === "aplicado").reduce((sum, movement) => sum + movement.qty_delta, 0);
+      if (Math.abs(systemQty - input.expectedStock) > 1e-9 || item.unit !== input.expectedUnit) throw new Error("El inventario cambió desde el resumen. Prepara nuevamente el conteo.");
+      const variance = input.countedQty - systemQty;
+      const count = withDefaults("inventory_counts", { item_id: item.id, counted_qty: input.countedQty, system_qty: systemQty, counted_by: input.countedBy, notes: input.notes ?? null });
+      const movement = variance === 0 ? null : withDefaults("inventory_movements", {
+        item_id: item.id, kind: "ajuste", qty_delta: variance, unit_cost: item.unit_cost,
+        crane_id: null, maintenance_order_id: null, inspection_id: null, purchase_id: null,
+        requested_by: input.countedBy, authorized_by: null,
+        reason: `Ajuste por conteo cíclico (${variance > 0 ? "sobrante" : "faltante"})`,
+        evidence_paths: [], serial_numbers: [], status: "aplicado", flags: ["diferencia_conteo"], channel: "agente",
+      });
+      // Comparación y ambas escrituras sin await: el segundo conteo observa el primero.
+      rows("inventory_counts").push(count);
+      if (movement) rows("inventory_movements").push(movement);
+      return clone(count);
+    },
+
     async createMaintenanceBundle(bundle) {
       const order = withDefaults("maintenance_orders", bundle.order);
       const inspection = withDefaults("inspections", bundle.inspection);
@@ -134,6 +157,15 @@ export function demoDb(): Db {
       const list = rows(table);
       const i = list.findIndex((x) => (x as { id: string }).id === id);
       if (i < 0) throw new Error(`[demo] ${table} ${id} no existe`);
+      list[i] = { ...list[i], ...patch };
+      return clone(list[i]);
+    },
+
+    async updateWhere(table, id, patch, expected) {
+      const list = rows(table);
+      const i = list.findIndex((row) => row.id === id && matches(row as unknown as Record<string, unknown>, { eq: expected }));
+      if (i < 0) return null;
+      // Compare and write synchronously, so concurrent confirmations cannot both win.
       list[i] = { ...list[i], ...patch };
       return clone(list[i]);
     },

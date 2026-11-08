@@ -123,8 +123,8 @@ async function Cranes({ searchParams }: { searchParams: SP }) {
                 </div>
                 {c.fleet_profile && <div className="mt-2"><Badge tone="amber">Identificación pendiente</Badge></div>}
                 <div className="mt-4 grid grid-cols-3 gap-2 text-[12px] text-muted">
-                  <span className="flex items-center gap-1.5" title="Capacidad verificada"><Weight className="size-3.5 shrink-0" /><span className="sr-only">Capacidad verificada: </span><b className="text-ink">{c.capacity_tons == null ? "—" : `${num(c.capacity_tons)} t`}</b></span>
-                  <span className="flex items-center gap-1.5" title="Longitud de pluma verificada"><Ruler className="size-3.5 shrink-0" /><span className="sr-only">Pluma: </span><b className="text-ink">{c.boom_length_m == null ? "—" : `${num(c.boom_length_m)} m`}</b></span>
+                  <span className="flex items-center gap-1.5" title="Capacidad registrada"><Weight className="size-3.5 shrink-0" /><span className="sr-only">Capacidad registrada: </span><b className="text-ink">{c.capacity_tons == null ? "—" : `${num(c.capacity_tons)} t`}</b></span>
+                  <span className="flex items-center gap-1.5" title="Pluma registrada"><Ruler className="size-3.5 shrink-0" /><span className="sr-only">Pluma registrada: </span><b className="text-ink">{c.boom_length_m == null ? "—" : `${num(c.boom_length_m)} m`}</b></span>
                   <span className="flex items-center gap-1.5" title="Lectura del horómetro"><Gauge className="size-3.5 shrink-0" /><span className="sr-only">Horómetro: </span><b className="text-ink">{c.hour_meter == null ? "—" : `${num(c.hour_meter)} h`}</b></span>
                 </div>
                 <div className="mt-4">

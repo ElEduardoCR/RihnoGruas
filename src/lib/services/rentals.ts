@@ -1,4 +1,4 @@
-import type { Db } from "@/lib/db/types";
+import type { Db, Scalar } from "@/lib/db/types";
 import type { Crane, CraneType, Inspection, Rental } from "@/lib/types";
 import { docStatus } from "@/lib/domain/fleet";
 import { DOC_LABELS } from "@/lib/labels";
@@ -37,7 +37,7 @@ export async function craneConflicts(db: Db, craneId: string, from: Date, to: Da
 
 /** La capacidad reportada no habilita un equipo de izaje hasta verificar su tabla. */
 export function identificationIssue(crane: Pick<Crane, "type" | "fleet_profile" | "capacity_tons">): string | null {
-  return crane.fleet_profile && crane.capacity_tons == null && ["grua_movil", "camion_grua", "grua_armable", "telehandler"].includes(crane.type)
+  return crane.fleet_profile && ["grua_movil", "camion_grua", "grua_armable", "telehandler"].includes(crane.type)
     ? "Capacidad métrica y tabla de cargas de la unidad pendientes de verificar"
     : null;
 }
@@ -234,8 +234,11 @@ async function upsertClient(db: Db, name: string) {
   return created.id;
 }
 
-export async function cancelRental(db: Db, rentalId: string) {
-  const rental = await db.update("rentals", rentalId, { status: "cancelada" });
+export async function cancelRental(db: Db, rentalId: string, expected?: Record<string, Scalar>) {
+  const rental = expected
+    ? await db.updateWhere("rentals", rentalId, { status: "cancelada" }, expected)
+    : await db.update("rentals", rentalId, { status: "cancelada" });
+  if (!rental) throw new RentalError("La renta cambió desde el resumen. Consulta de nuevo y prepara una nueva propuesta antes de cancelarla.");
   const insp = await db.select("inspections", { eq: { rental_id: rentalId }, in: { status: ["programada", "vencida"] } });
   for (const i of insp) await db.update("inspections", i.id, { status: "cancelada" });
   return rental;

@@ -54,6 +54,13 @@ function memoryDb() {
       tables.set("agent_pending_actions", rows("agent_pending_actions").map((row) => row.id === id ? updated : row));
       return structuredClone(updated);
     },
+    async updateWhere(table, id, patch, expected) {
+      const existing = rows(table).find((row) => row.id === id && Object.entries(expected).every(([key, value]) => ((row as unknown as Record<string, unknown>)[key] ?? null) === value));
+      if (!existing) return null;
+      const updated = { ...existing, ...structuredClone(patch) };
+      tables.set(table, rows(table).map((row) => row.id === id ? updated : row));
+      return structuredClone(updated);
+    },
     async remove() { throw new Error("Unexpected deletion"); },
     async upload() { throw new Error("Unexpected upload"); },
     async download() { throw new Error("Unexpected download"); },

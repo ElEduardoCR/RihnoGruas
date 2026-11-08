@@ -85,8 +85,8 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
             </p>
             <div className="mt-6 grid grid-cols-2 gap-4 sm:grid-cols-4">
               {[
-                ["Capacidad verificada", c.capacity_tons == null ? "—" : `${num(c.capacity_tons)} t`],
-                ["Pluma verificada", c.boom_length_m == null ? "—" : `${num(c.boom_length_m)} m`],
+                ["Capacidad registrada", c.capacity_tons == null ? "—" : `${num(c.capacity_tons)} t`],
+                ["Pluma registrada", c.boom_length_m == null ? "—" : `${num(c.boom_length_m)} m`],
                 ["Horómetro", c.hour_meter == null ? "—" : `${num(c.hour_meter)} h`],
                 ["Tarifa base", c.daily_rate == null ? "—" : `${money(c.daily_rate)}/día`],
               ].map(([k, v]) => (
@@ -188,8 +188,8 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
             <KeyValue label="No. de serie" mono>{c.serial_number}</KeyValue>
             <KeyValue label="VIN" mono>{c.vin}</KeyValue>
             <KeyValue label="Placas" mono>{c.plates}</KeyValue>
-            <KeyValue label="Capacidad verificada">{c.capacity_tons == null ? null : `${num(c.capacity_tons)} t`}</KeyValue>
-            <KeyValue label="Longitud de pluma">{c.boom_length_m == null ? null : `${num(c.boom_length_m)} m`}</KeyValue>
+            <KeyValue label="Capacidad registrada">{c.capacity_tons == null ? null : `${num(c.capacity_tons)} t`}</KeyValue>
+            <KeyValue label="Pluma registrada">{c.boom_length_m == null ? null : `${num(c.boom_length_m)} m`}</KeyValue>
             <KeyValue label="Horómetro">{c.hour_meter == null ? null : `${num(c.hour_meter)} h`}</KeyValue>
             <KeyValue label="Odómetro">{c.odometer_km == null ? null : `${num(c.odometer_km)} km`}</KeyValue>
             <KeyValue label="Intervalo de servicio">{c.service_interval_hours == null ? null : `${num(c.service_interval_hours)} h`}</KeyValue>

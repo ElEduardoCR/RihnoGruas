@@ -12,7 +12,7 @@ export const MANAGER_ROLES: StaffRole[] = ["direccion", "administracion"];
 
 /** Sólo Dirección y Administración pueden editar catálogos. */
 export function assertManager(staff: Staff | null) {
-  if (!staff || !MANAGER_ROLES.includes(staff.role)) throw new CatalogError("Sólo Dirección o Administración pueden editar catálogos.");
+  if (!staff?.active || !MANAGER_ROLES.includes(staff.role)) throw new CatalogError("Sólo Dirección o Administración pueden editar catálogos.");
 }
 
 const nonNeg = (v: number | null, label: string) => {
@@ -58,7 +58,10 @@ export interface CraneInput {
   active: boolean;
 }
 
-export async function saveCrane(db: Db, input: CraneInput, id?: string | null): Promise<Crane> {
+async function validatedCraneInput(db: Db, input: CraneInput, id?: string | null): Promise<CraneInput> {
+  for (const field of ["code", "name", "brand", "model"] as const) {
+    if (typeof input[field] !== "string") throw new CatalogError(`${field}: indica un texto válido.`);
+  }
   const code = input.code.trim().toUpperCase().replace(/\s+/g, "-");
   if (!code) throw new CatalogError("Indica el número económico.");
   if (!input.name.trim()) throw new CatalogError("Indica el nombre de la unidad.");
@@ -67,11 +70,19 @@ export async function saveCrane(db: Db, input: CraneInput, id?: string | null): 
   if (input.capacity_tons != null && (!Number.isFinite(input.capacity_tons) || input.capacity_tons <= 0)) throw new CatalogError("La capacidad debe ser positiva o quedar pendiente.");
   if (input.service_interval_hours != null && (!Number.isFinite(input.service_interval_hours) || input.service_interval_hours <= 0)) throw new CatalogError("El intervalo de servicio debe ser positivo o quedar pendiente.");
   if (input.hour_meter != null && input.last_service_hours != null && input.last_service_hours > input.hour_meter) throw new CatalogError("El último servicio no puede superar el horómetro actual.");
-  if (input.year != null && (input.year < 1950 || input.year > 2100)) throw new CatalogError("Año inválido.");
+  if (input.year != null && (!Number.isInteger(input.year) || input.year < 1950 || input.year > 2100)) throw new CatalogError("Año inválido.");
+  if (typeof input.active !== "boolean") throw new CatalogError("Indica si la unidad está activa.");
+  for (const field of ["serial_number", "vin", "plates", "base_location", "acquired_on", "notes"] as const) {
+    if (input[field] != null && typeof input[field] !== "string") throw new CatalogError(`${field}: indica un texto válido o déjalo pendiente.`);
+  }
+  if (input.acquired_on != null) {
+    const date = new Date(`${input.acquired_on}T12:00:00.000Z`);
+    if (!/^\d{4}-\d{2}-\d{2}$/.test(input.acquired_on) || !Number.isFinite(date.getTime()) || date.toISOString().slice(0, 10) !== input.acquired_on) throw new CatalogError("Fecha de adquisición inválida: usa una fecha real en formato YYYY-MM-DD.");
+  }
   const dup = (await db.select("cranes", { eq: { code } })).find((c) => c.id !== id);
   if (dup) throw new CatalogError(`Ya existe una unidad con el número económico ${code}.`);
 
-  const row: Partial<Crane> = {
+  return {
     code,
     name: input.name.trim(),
     type: input.type,
@@ -93,7 +104,65 @@ export async function saveCrane(db: Db, input: CraneInput, id?: string | null): 
     notes: input.notes,
     active: input.active,
   };
+}
+
+export async function saveCrane(db: Db, input: CraneInput, id?: string | null): Promise<Crane> {
+  const row = await validatedCraneInput(db, input, id);
   return id ? db.update("cranes", id, row) : db.insert("cranes", row);
+}
+
+export type CranePatch = Partial<CraneInput>;
+const CRANE_EDIT_FIELDS = new Set<keyof CraneInput>([
+  "code", "name", "type", "brand", "model", "year", "capacity_tons", "boom_length_m",
+  "serial_number", "vin", "plates", "hour_meter", "odometer_km", "service_interval_hours",
+  "last_service_hours", "base_location", "daily_rate", "acquired_on", "notes", "active",
+]);
+
+function patchFields(patch: CranePatch): (keyof CraneInput)[] {
+  if (!patch || typeof patch !== "object" || Array.isArray(patch)) throw new CatalogError("Los cambios de la unidad no tienen un formato válido.");
+  const fields = Object.keys(patch) as (keyof CraneInput)[];
+  if (!fields.length) throw new CatalogError("Indica al menos un dato de la unidad que quieras actualizar.");
+  if (fields.some((field) => !CRANE_EDIT_FIELDS.has(field) || patch[field] === undefined)) throw new CatalogError("La solicitud contiene un campo de unidad que no se puede editar.");
+  return fields;
+}
+
+async function currentCraneForEdit(db: Db, id: string, staff: Staff) {
+  assertManager(staff);
+  assertManager(await db.get("staff", staff.id));
+  const crane = await db.get("cranes", id);
+  if (!crane) throw new CatalogError("La unidad ya no existe. Consulta la flota y prepara otra solicitud.");
+  return crane;
+}
+
+/** Valida sobre la ficha actual y conserva sólo los valores que realmente van a cambiar. */
+export async function prepareCraneUpdate(db: Db, id: string, patch: CranePatch, staff: Staff) {
+  const fields = patchFields(patch);
+  const crane = await currentCraneForEdit(db, id, staff);
+  const normalized = await validatedCraneInput(db, { ...crane, ...patch }, id);
+  const changes = fields.filter((field) => normalized[field] !== crane[field]);
+  if (!changes.length) throw new CatalogError("La unidad ya tiene esos datos. No hay cambios que confirmar.");
+  return {
+    crane,
+    patch: Object.fromEntries(changes.map((field) => [field, normalized[field]])) as CranePatch,
+    before: Object.fromEntries(changes.map((field) => [field, crane[field]])) as CranePatch,
+  };
+}
+
+/** Revalida la confirmación y escribe sólo el patch, sin reemplazar una ficha antigua. */
+export async function updateCrane(db: Db, id: string, patch: CranePatch, before: CranePatch, staff: Staff): Promise<Crane> {
+  const fields = patchFields(patch);
+  if (!before || typeof before !== "object" || Array.isArray(before) || fields.length !== Object.keys(before).length || fields.some((field) => !Object.hasOwn(before, field))) {
+    throw new CatalogError("El resumen de cambios no coincide con la solicitud. Prepara una nueva actualización.");
+  }
+  const current = await currentCraneForEdit(db, id, staff);
+  if (fields.some((field) => current[field] !== before[field])) {
+    throw new CatalogError("Los datos que ibas a cambiar se actualizaron después del resumen. Consulta la ficha y prepara una nueva propuesta para confirmar los valores actuales.");
+  }
+  const validated = await validatedCraneInput(db, { ...current, ...patch }, id);
+  const requested = Object.fromEntries(fields.map((field) => [field, validated[field]])) as CranePatch;
+  const saved = await db.updateWhere("cranes", id, requested, before);
+  if (!saved) throw new CatalogError("Los datos cambiaron al confirmar esta edición. Consulta la ficha y prepara una nueva propuesta con los valores actuales.");
+  return saved;
 }
 
 // ---------------------------------------------------------------- clientes

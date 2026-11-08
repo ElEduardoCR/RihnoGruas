@@ -1,6 +1,6 @@
 import type { SupabaseClient } from "@supabase/supabase-js";
 import type { TableName, Tables } from "@/lib/types";
-import type { Bucket, Db, Query, StoredFile } from "./types";
+import type { Bucket, Db, Query, Scalar, StoredFile } from "./types";
 
 type AnyClient = SupabaseClient;
 
@@ -41,6 +41,12 @@ export function supabaseDb(client: AnyClient): Db {
       return data as Tables["maintenance_orders"];
     },
 
+    async createInventoryCountBundle(input) {
+      const { data, error } = await client.rpc("create_inventory_count", { p_input: input });
+      if (error || !data) fail("inventory_counts", "atomic count", error);
+      return data as Tables["inventory_counts"];
+    },
+
     async select<T extends TableName>(table: T, q?: Query) {
       const { data, error } = await applyQuery(tbl(table).select("*"), q);
       if (error) fail(table, "select", error);
@@ -70,6 +76,13 @@ export function supabaseDb(client: AnyClient): Db {
       const { data, error } = await tbl(table).update(patch).eq("id", id).select("*").single();
       if (error) fail(table, "update", error);
       return data as Tables[T];
+    },
+
+    async updateWhere<T extends TableName>(table: T, id: string, patch: Partial<Tables[T]>, expected: Record<string, Scalar>) {
+      const query = applyQuery(tbl(table).update(patch).eq("id", id), { eq: expected });
+      const { data, error } = await query.select("*").maybeSingle();
+      if (error) fail(table, "conditional update", error);
+      return (data ?? null) as Tables[T] | null;
     },
 
     async updatePendingAction(id, expectedStatus, patch, guard) {

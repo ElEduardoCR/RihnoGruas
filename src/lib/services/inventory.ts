@@ -1,5 +1,5 @@
 import type { Db } from "@/lib/db/types";
-import type { Channel, InventoryItem, InventoryMovement, PurchaseCategory, Staff } from "@/lib/types";
+import type { Channel, InventoryCount, InventoryItem, InventoryMovement, PurchaseCategory, Staff } from "@/lib/types";
 import { env } from "@/lib/env";
 import { addDays, money, num, zonedParts } from "@/lib/time";
 import { raiseAlert, sendToStaff } from "./notify";
@@ -243,48 +243,53 @@ export async function registerPurchase(
 }
 
 /** Conteo cíclico: registra la diferencia, ajusta y alerta si supera 5 %. */
-export async function registerCount(db: Db, input: { itemId: string; countedQty: number; countedBy: string | null; notes?: string | null }) {
+export async function registerCount(db: Db, input: { itemId: string; countedQty: number; countedBy: string | null; notes?: string | null; expectedStock?: number; expectedUnit?: string }) {
+  if (!Number.isFinite(input.countedQty) || input.countedQty < 0) throw new InventoryError("La cantidad contada debe ser un número no negativo.");
   const stock = (await getStock(db)).find((s) => s.id === input.itemId);
   if (!stock) throw new InventoryError("Artículo no encontrado.");
-  const variance = input.countedQty - stock.stock;
-  const count = await db.insert("inventory_counts", {
-    item_id: stock.id,
-    counted_qty: input.countedQty,
-    system_qty: stock.stock,
-    counted_by: input.countedBy,
-    notes: input.notes ?? null,
-  });
-  if (variance !== 0) {
-    await db.insert("inventory_movements", {
-      item_id: stock.id,
-      kind: "ajuste",
-      qty_delta: variance,
-      unit_cost: stock.unit_cost,
-      crane_id: null,
-      maintenance_order_id: null,
-      inspection_id: null,
-      purchase_id: null,
-      requested_by: input.countedBy,
-      authorized_by: null,
-      reason: `Ajuste por conteo cíclico (${variance > 0 ? "sobrante" : "faltante"})`,
-      evidence_paths: [],
-      serial_numbers: [],
-      status: "aplicado",
-      flags: ["diferencia_conteo"],
-      channel: "web",
+  let count: InventoryCount;
+  if (input.expectedStock !== undefined) {
+    if (!Number.isFinite(input.expectedStock) || !input.expectedUnit?.trim()) throw new InventoryError("Falta el inventario y la unidad que se mostraron en la propuesta.");
+    if (!db.createInventoryCountBundle) throw new InventoryError("El registro atómico de conteos no está disponible. No se guardó el conteo.");
+    // El RPC vuelve a leer existencias bajo bloqueo y guarda conteo+ajuste en una transacción.
+    count = await db.createInventoryCountBundle({
+      itemId: input.itemId, countedQty: input.countedQty, countedBy: input.countedBy,
+      expectedStock: input.expectedStock, expectedUnit: input.expectedUnit, notes: input.notes ?? null,
     });
+  } else {
+    // Se conserva el flujo de captura manual existente; el chat siempre usa el bloque atómico.
+    const variance = input.countedQty - stock.stock;
+    count = await db.insert("inventory_counts", {
+      item_id: stock.id, counted_qty: input.countedQty, system_qty: stock.stock,
+      counted_by: input.countedBy, notes: input.notes ?? null,
+    });
+    if (variance !== 0) {
+      await db.insert("inventory_movements", {
+        item_id: stock.id, kind: "ajuste", qty_delta: variance, unit_cost: stock.unit_cost,
+        crane_id: null, maintenance_order_id: null, inspection_id: null, purchase_id: null,
+        requested_by: input.countedBy, authorized_by: null,
+        reason: `Ajuste por conteo cíclico (${variance > 0 ? "sobrante" : "faltante"})`,
+        evidence_paths: [], serial_numbers: [], status: "aplicado", flags: ["diferencia_conteo"], channel: "web",
+      });
+    }
   }
-  const pct = stock.stock ? Math.abs(variance) / stock.stock : variance ? 1 : 0;
+  const variance = count.variance;
+  const pct = count.system_qty ? Math.abs(variance) / Math.abs(count.system_qty) : variance ? 1 : 0;
+  let alertWarning: string | null = null;
   if (pct > 0.05) {
-    await raiseAlert(db, {
-      dedupe_key: `inv:conteo:${count.id}`,
-      topic: "inventario",
-      severity: variance < 0 ? "critica" : "aviso",
-      title: `Diferencia en conteo: ${stock.name}`,
-      body: `Sistema ${num(stock.stock)} ${stock.unit}, contado ${num(input.countedQty)} ${stock.unit} (${variance > 0 ? "+" : ""}${num(variance)} · ${money(Math.abs(variance) * stock.unit_cost)}).`,
-    });
+    try {
+      await raiseAlert(db, {
+        dedupe_key: `inv:conteo:${count.id}`, topic: "inventario", severity: variance < 0 ? "critica" : "aviso",
+        title: `Diferencia en conteo: ${stock.name}`,
+        body: `Sistema ${num(count.system_qty)} ${stock.unit}, contado ${num(count.counted_qty)} ${stock.unit} (${variance > 0 ? "+" : ""}${num(variance)} · ${money(Math.abs(variance) * stock.unit_cost)}).`,
+      });
+    } catch (error) {
+      // El conteo ya quedó confirmado: un fallo del aviso nunca debe provocar repetir el ajuste.
+      console.error("[inventory] Conteo guardado; falló el aviso", error);
+      alertWarning = "El conteo y su ajuste quedaron guardados, pero no se pudo completar el aviso de la diferencia.";
+    }
   }
-  return { count, variance };
+  return { count, variance, alertWarning };
 }
 
 export async function inventoryWatch(db: Db, now: Date) {

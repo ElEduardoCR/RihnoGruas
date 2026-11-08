@@ -5,6 +5,7 @@ import { useEffect, useRef, useState, useTransition } from "react";
 import { ArrowRight, ArrowUp, Boxes, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardCheck, Loader2, MessageSquare, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
 import { agentChatAction, loadConversationAction } from "@/app/actions";
 import type { StaffRole, ToolCallLog } from "@/lib/types";
+import { parseMessageContent } from "@/lib/agent/message-content";
 import { RhinoMark } from "./brand";
 import { cx } from "./ui";
 
@@ -39,6 +40,7 @@ const TOOL_LABELS: Record<string, string> = {
   buscar_politica: "Consultar las reglas de la empresa",
   consultar_operadores: "Verificar operadores",
   consultar_clientes: "Buscar clientes",
+  consultar_rentas: "Consultar rentas",
   enviar_revision: "Compartir enlace de revisión",
   crear_renta: "Registrar renta",
   programar_revision: "Programar revisión",
@@ -50,16 +52,22 @@ const TOOL_LABELS: Record<string, string> = {
   registrar_compra: "Registrar compra",
   registrar_cliente: "Dar de alta un cliente",
   registrar_grua: "Dar de alta una unidad",
+  actualizar_grua: "Actualizar datos de la unidad",
+  actualizar_cliente: "Actualizar datos del cliente",
+  actualizar_articulo: "Actualizar el catálogo de almacén",
+  actualizar_renta: "Actualizar datos de la renta",
+  cancelar_renta: "Cancelar la renta",
+  registrar_conteo: "Registrar conteo físico del almacén",
+  navegar_app: "Preparar acceso directo",
 };
 
 /** Formato compartido con WhatsApp, sin interpretar HTML generado por el modelo. */
 function MessageText({ text }: { text: string }) {
-  return text.split(/(\*\*[^*\n]+\*\*|\*[^*\n]+\*|_[^_\n]+_|https?:\/\/[^\s<>]+)/g).map((part, i) => {
-    if (part.startsWith("**") && part.endsWith("**")) return <strong key={i}>{part.slice(2, -2)}</strong>;
-    if (part.startsWith("*") && part.endsWith("*") && part.length > 2) return <strong key={i}>{part.slice(1, -1)}</strong>;
-    if (part.startsWith("_") && part.endsWith("_") && part.length > 2) return <em key={i}>{part.slice(1, -1)}</em>;
-    if (/^https?:\/\//.test(part)) return <a key={i} href={part} target="_blank" rel="noopener noreferrer" className="break-all text-rhino-600 underline underline-offset-2">{part}</a>;
-    return <span key={i}>{part}</span>;
+  return parseMessageContent(text).map((part, i) => {
+    if (part.type === "strong") return <strong key={i}>{part.text}</strong>;
+    if (part.type === "em") return <em key={i}>{part.text}</em>;
+    if (part.type === "link") return <Link key={i} href={part.href} prefetch={false} className="my-1 inline-flex min-h-11 max-w-full items-center gap-2 rounded-xl border border-rhino-200 bg-rhino-50/50 px-3 py-2 font-medium text-rhino-600 transition hover:border-rhino-500 hover:bg-rhino-50 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-rhino-500"><span className="min-w-0 break-words">{part.text}</span><ArrowRight className="size-4 shrink-0" aria-hidden="true" /></Link>;
+    return <span key={i}>{part.text}</span>;
   });
 }
 

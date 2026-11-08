@@ -56,6 +56,7 @@ function memoryDb() {
     },
     async remove() { throw new Error("Unexpected removal"); },
     async updatePendingAction() { throw new Error("Unexpected agent action transition"); },
+    async updateWhere() { throw new Error("Unexpected conditional update"); },
     async upload(bucket, path, file) { files.set(`${bucket}/${path}`, structuredClone(file)); },
     async download(bucket, path) { return structuredClone(files.get(`${bucket}/${path}`) ?? null); },
     async createMaintenanceBundle(bundle) {

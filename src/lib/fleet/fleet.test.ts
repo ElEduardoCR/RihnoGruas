@@ -3,7 +3,8 @@ import assert from "node:assert/strict";
 import { buildFleetPayload } from "./payload";
 import { importConflicts } from "./import-plan";
 import { serviceUsage } from "@/lib/domain/fleet";
-import { identificationIssue } from "@/lib/services/rentals";
+import { createRental, documentIssues, findAvailable, identificationIssue } from "@/lib/services/rentals";
+import { demoDb } from "@/lib/db/demo";
 
 test("reported identities stay separate; uncertain National chassis do not become extra assets", () => {
   const p = buildFleetPayload();
@@ -38,6 +39,51 @@ test("unknown specifications never become zero or a guessed service deadline", (
     assert.equal(serviceUsage(c).known, false);
     if (["grua_movil", "camion_grua", "telehandler"].includes(c.type)) assert.ok(identificationIssue(c));
   }
+});
+
+test("recording administrative capacity never clears identification restrictions on imported lifting equipment", () => {
+  const imported = buildFleetPayload().cranes.find((crane) => crane.code === "GR-03")!;
+  for (const type of ["grua_movil", "camion_grua", "grua_armable", "telehandler"] as const) {
+    const original = { ...imported, type, capacity_tons: null };
+    const issue = identificationIssue(original);
+    assert.ok(issue);
+    assert.equal(identificationIssue({ ...original, capacity_tons: 12 }), issue);
+    assert.equal(identificationIssue({ ...original, fleet_profile: null }), null);
+    assert.equal(identificationIssue({ ...original, fleet_profile: null, capacity_tons: 12 }), null);
+  }
+  for (const type of ["tractocamion", "remolque", "vehiculo_apoyo"] as const) {
+    assert.equal(identificationIssue({ ...imported, type, capacity_tons: 12 }), null);
+  }
+});
+
+test("GR-03 can store and filter 12 tonnes while its rental restriction stays unchanged", async (t) => {
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("This verification must never call a remote service"); });
+  const db = demoDb();
+  const payload = buildFleetPayload();
+  const imported = payload.cranes.find((crane) => crane.code === "GR-03")!;
+  const crane = await db.insert("cranes", { ...structuredClone(imported), id: crypto.randomUUID() });
+  const template = payload.checklist_templates.find((row) => row.kind === "revision_total" && row.crane_types.includes(crane.type))!;
+  await db.insert("checklist_templates", { ...template, id: crypto.randomUUID() });
+  const now = new Date("2026-11-08T16:00:00.000Z");
+  const from = new Date("2026-11-10T16:00:00.000Z");
+  const to = new Date("2026-11-11T16:00:00.000Z");
+  const before = await documentIssues(db, crane.id, to, now);
+  assert.ok(before.some((issue) => issue.blocking && /tabla de cargas/.test(issue.text)));
+
+  const saved = await db.update("cranes", crane.id, { capacity_tons: 12 });
+  assert.equal(saved.capacity_tons, 12);
+  assert.deepEqual(saved.fleet_profile, crane.fleet_profile);
+  assert.deepEqual(await documentIssues(db, crane.id, to, now), before);
+  const matches = await findAvailable(db, { from, to, minCapacity: 12 }, now);
+  const result = matches.find((match) => match.crane.id === crane.id);
+  assert.ok(result, "The recorded value still participates in capacity filters");
+  assert.equal(result.crane.capacity_tons, 12);
+  assert.equal(result.available, false);
+  assert.deepEqual(result.docIssues, before);
+
+  await assert.rejects(createRental(db, { craneId: crane.id, clientName: "Cliente de prueba", start: from, end: to, createdBy: "agente" }, now), /tabla de cargas/);
+  assert.equal((await db.select("rentals", { eq: { crane_id: crane.id } })).length, 0);
+  assert.equal((await db.select("inspections", { eq: { crane_id: crane.id } })).length, 0);
 });
 
 test("each equipment category has compatible inspections and sourced maintenance plans", () => {

@@ -117,10 +117,10 @@ export function CraneForm({ crane }: { crane?: Crane }) {
 
       <Section title="Capacidad y uso">
         <Grid cols={3}>
-          <Field label="Capacidad verificada (t métricas)" hint="Vacío si falta confirmar la unidad de medida o no aplica.">
+          <Field label="Capacidad registrada (t métricas)" hint="Puedes capturar el dato proporcionado; vacío si no se conoce o no aplica.">
             <input name="capacity_tons" inputMode="decimal" defaultValue={v("capacity_tons")} className={inputClass} />
           </Field>
-          <Field label="Pluma (m)">
+          <Field label="Pluma registrada (m)">
             <input name="boom_length_m" inputMode="decimal" defaultValue={v("boom_length_m")} className={inputClass} />
           </Field>
           <Field label="Tarifa por día">
