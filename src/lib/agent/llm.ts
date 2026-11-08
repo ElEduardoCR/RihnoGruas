@@ -1,3 +1,4 @@
+import { AsyncLocalStorage } from "node:async_hooks";
 import OpenAI from "openai";
 import type { FunctionTool, Response, ResponseInputItem } from "openai/resources/responses/responses";
 import { env } from "@/lib/env";
@@ -6,6 +7,48 @@ import { env } from "@/lib/env";
 
 let client: OpenAI | null = null;
 const openai = () => (client ??= new OpenAI({ apiKey: env.openaiKey }));
+
+const DEFAULT_MODEL_BUDGET_MS = 240_000;
+const modelBudget = new AsyncLocalStorage<{ deadline: number; signal: AbortSignal }>();
+
+export class ModelTimeBudgetError extends Error {
+  constructor() {
+    super("Se agotó el tiempo disponible para la consulta de Rhino.");
+    this.name = "ModelTimeBudgetError";
+  }
+}
+
+/** Todas las rondas y las llamadas al modelo desde herramientas comparten este límite. */
+export async function withModelDeadline<T>(deadline: number, work: () => Promise<T>): Promise<T> {
+  const remaining = deadline - Date.now();
+  if (remaining <= 0) throw new ModelTimeBudgetError();
+  return modelBudget.run({ deadline, signal: AbortSignal.timeout(remaining) }, work);
+}
+
+export function assertModelBudget() {
+  const budget = modelBudget.getStore();
+  if (budget && (budget.signal.aborted || Date.now() >= budget.deadline)) throw new ModelTimeBudgetError();
+}
+
+async function requestWithinBudget<T>(request: (options: OpenAI.RequestOptions) => PromiseLike<T>): Promise<T> {
+  assertModelBudget();
+  const budget = modelBudget.getStore() ?? {
+    deadline: Date.now() + DEFAULT_MODEL_BUDGET_MS,
+    signal: AbortSignal.timeout(DEFAULT_MODEL_BUDGET_MS),
+  };
+  const remaining = budget.deadline - Date.now();
+  if (remaining <= 0) throw new ModelTimeBudgetError();
+  try {
+    const result = await request({ timeout: remaining, maxRetries: 0, signal: budget.signal });
+    if (budget.signal.aborted || Date.now() >= budget.deadline) throw new ModelTimeBudgetError();
+    return result;
+  } catch (error) {
+    if (error instanceof OpenAI.APIConnectionTimeoutError || budget.signal.aborted || Date.now() >= budget.deadline) {
+      throw new ModelTimeBudgetError();
+    }
+    throw error;
+  }
+}
 
 export type ChatMessage = ResponseInputItem;
 export type ToolSpec = FunctionTool;
@@ -45,11 +88,11 @@ function parseStructured<T>(response: Response): T {
 }
 
 export async function chat(messages: ChatMessage[], tools: ToolSpec[], model = env.openaiModel) {
-  const res = await openai().responses.create({
+  const res = await requestWithinBudget((options) => openai().responses.create({
     ...responseOptions(model),
     input: messages,
     ...(tools.length ? { tools, tool_choice: "auto" as const } : {}),
-  });
+  }, options));
   assertComplete(res);
   const refusal = responseRefusal(res);
   const output = res.output.map((item) => {
@@ -67,31 +110,31 @@ export async function chat(messages: ChatMessage[], tools: ToolSpec[], model = e
 
 /** Salida estructurada con JSON Schema (modo strict). */
 export async function structured<T>(system: string, user: string, name: string, schema: Record<string, unknown>, model = env.openaiModel): Promise<T> {
-  const res = await openai().responses.create({
+  const res = await requestWithinBudget((options) => openai().responses.create({
     ...responseOptions(model),
     input: [
       { role: "system", content: system },
       { role: "user", content: user },
     ],
     text: { format: { type: "json_schema", name, schema, strict: true } },
-  });
+  }, options));
   return parseStructured<T>(res);
 }
 
 /** Visión: describe/valida una foto de evidencia. */
 export async function vision<T>(system: string, prompt: string, imageDataUrl: string, name: string, schema: Record<string, unknown>): Promise<T> {
-  const res = await openai().responses.create({
+  const res = await requestWithinBudget((options) => openai().responses.create({
     ...responseOptions(env.openaiVisionModel),
     input: [
       { role: "system", content: system },
       { role: "user", content: [{ type: "input_text", text: prompt }, { type: "input_image", image_url: imageDataUrl, detail: "low" }] },
     ],
     text: { format: { type: "json_schema", name, schema, strict: true } },
-  });
+  }, options));
   return parseStructured<T>(res);
 }
 
 export async function embed(text: string): Promise<number[]> {
-  const res = await openai().embeddings.create({ model: env.openaiEmbeddingModel, input: text });
+  const res = await requestWithinBudget((options) => openai().embeddings.create({ model: env.openaiEmbeddingModel, input: text }, options));
   return res.data[0].embedding;
 }

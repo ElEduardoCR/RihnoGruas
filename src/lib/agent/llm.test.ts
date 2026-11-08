@@ -1,5 +1,6 @@
 import test, { type TestContext } from "node:test";
 import assert from "node:assert/strict";
+import OpenAI from "openai";
 import { Responses, type Response, type ResponseCreateParamsNonStreaming, type ResponseOutputItem } from "openai/resources/responses/responses";
 
 const now = new Date("2026-11-08T16:00:00.000Z");
@@ -84,6 +85,93 @@ test("Luna Responses integration (offline)", async (t) => {
     assert.equal(runs[0].tokens_in, 22);
     assert.equal(runs[0].tokens_out, 14);
     assert.equal(runs[0].error, null);
+  });
+
+  await t.test("all model rounds share the time remaining since the agent started", async (t) => {
+    const { db, input } = await fixture();
+    let clock = Date.now();
+    t.mock.method(Date, "now", () => clock);
+    const get = db.get.bind(db);
+    t.mock.method(db, "get", async (...args: Parameters<typeof db.get>) => {
+      clock += 20_000; // La consulta de identidad también consume el presupuesto.
+      return get(...args);
+    });
+    const options: OpenAI.RequestOptions[] = [];
+    t.mock.method(Responses.prototype, "create", async (_body: ResponseCreateParamsNonStreaming, requestOptions: OpenAI.RequestOptions) => {
+      options.push(requestOptions);
+      if (options.length === 1) {
+        clock += 65_000;
+        return response([reasoning, call("consultar_capacidades", "call_budget")]);
+      }
+      return response([answer("Consulta terminada dentro del tiempo disponible.")]);
+    });
+    const result = await runAgent(db, { ...input, text: "¿Qué puedes hacer?" });
+    assert.match(result.reply, /Consulta terminada/);
+    assert.deepEqual(options.map((option) => option.timeout), [220_000, 155_000]);
+    assert.ok(options.every((option) => option.maxRetries === 0));
+    assert.equal(options[0].signal, options[1].signal);
+    assert.ok(options[0].signal instanceof AbortSignal);
+  });
+
+  await t.test("an exhausted shared budget stops the next round and persists a usable reply", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { db, input } = await fixture();
+    let clock = Date.now();
+    t.mock.method(Date, "now", () => clock);
+    const select = db.select.bind(db);
+    t.mock.method(db, "select", async (...args: Parameters<typeof db.select>) => {
+      if (args[0] === "clients") clock += 240_000;
+      return select(...args);
+    });
+    const requests = mockResponses(t, [response([call("consultar_clientes", "call_exhausted", { buscar: null })])]);
+    const result = await runAgent(db, { ...input, text: "Consulta los clientes." });
+    assert.equal(requests.length, 1, "A second model request must not receive a fresh budget");
+    assert.match(result.reply, /tiempo límite/);
+    assert.equal(result.pendingId, null);
+    const runs = await db.select("agent_runs", { eq: { phone: input.phone } });
+    assert.match(runs[0].error ?? "", /agotó el tiempo/);
+    const messages = await db.select("wa_messages", { eq: { phone: input.phone, direction: "out" } });
+    assert.equal(messages.at(-1)?.body, result.reply);
+  });
+
+  await t.test("SDK timeouts keep prepared actions unexecuted and do not retry", async (t) => {
+    t.mock.method(console, "error", () => {});
+    const { db, input } = await fixture();
+    const name = `Propuesta con timeout ${crypto.randomUUID()}`;
+    const args = { nombre: name, contacto: null, telefono: null, correo: null, rfc: null, direccion: null, notas: null };
+    const options: OpenAI.RequestOptions[] = [];
+    t.mock.method(Responses.prototype, "create", async (_body: ResponseCreateParamsNonStreaming, requestOptions: OpenAI.RequestOptions) => {
+      options.push(requestOptions);
+      if (options.length === 1) return response([call("registrar_cliente", "call_timeout", args)]);
+      throw new OpenAI.APIConnectionTimeoutError();
+    });
+    const result = await runAgent(db, { ...input, text: `Prepara el alta de ${name}.` });
+    assert.match(result.reply, /tiempo límite/);
+    assert.ok(result.pendingId);
+    assert.equal((await db.get("agent_pending_actions", result.pendingId))?.status, "pendiente");
+    assert.equal((await db.select("clients", { eq: { name } })).length, 0);
+    assert.equal(options.length, 2);
+    assert.ok(options.every((option) => option.maxRetries === 0));
+    assert.ok((options[1].timeout ?? Infinity) <= (options[0].timeout ?? 0));
+    const runs = await db.select("agent_runs", { eq: { phone: input.phone } });
+    assert.match(runs[0].error ?? "", /agotó el tiempo/);
+  });
+
+  await t.test("WhatsApp leaves room for delivery within its shorter execution limit", async (t) => {
+    const { db, input } = await fixture();
+    const phone = "5219990001122";
+    await db.update("staff", input.staffId, { phone });
+    const clock = Date.now();
+    t.mock.method(Date, "now", () => clock);
+    const options: OpenAI.RequestOptions[] = [];
+    t.mock.method(Responses.prototype, "create", async (_body: ResponseCreateParamsNonStreaming, requestOptions: OpenAI.RequestOptions) => {
+      options.push(requestOptions);
+      return response([answer("Consulta de WhatsApp lista.")]);
+    });
+    const result = await runAgent(db, { ...input, phone, trigger: "whatsapp", text: "Hola Rhino." });
+    assert.equal(result.reply, "Consulta de WhatsApp lista.");
+    assert.equal(options[0].timeout, 45_000);
+    assert.equal(options[0].maxRetries, 0);
   });
 
   await t.test("a model write creates only a proposal until explicit confirmation", async (t) => {

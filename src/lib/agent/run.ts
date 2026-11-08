@@ -4,7 +4,7 @@ import { env, hasOpenAI } from "@/lib/env";
 import { sendToPhone } from "@/lib/services/notify";
 import { CANCEL_RE, CONFIRM_RE, systemPrompt } from "./prompt";
 import { ToolError, toolByName, toolsFor, type ToolCtx } from "./tools";
-import { chat, type ChatMessage, type ToolSpec } from "./llm";
+import { assertModelBudget, chat, ModelTimeBudgetError, withModelDeadline, type ChatMessage, type ToolSpec } from "./llm";
 import { collectInsights, type Insight } from "./insights";
 import { fallbackAgent } from "./fallback";
 
@@ -106,7 +106,8 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
         pendingSummary = pending?.summary ?? null;
         if (pendingSummary) reply += `\n\nSigue pendiente esta acción:\n${pendingSummary}\nResponde *SÍ* para ejecutarla o *NO* para cancelarla.`;
       } else {
-        const r = await llmTurn(db, input, ctx, toolCalls, persist, pending);
+        const deadline = started + (input.trigger === "whatsapp" ? 45_000 : 240_000);
+        const r = await withModelDeadline(deadline, () => llmTurn(db, input, ctx, toolCalls, persist, pending));
         reply = r.reply;
         pendingSummary = r.pendingSummary;
         tokensIn = r.tokensIn;
@@ -116,7 +117,9 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
   } catch (e) {
     error = e instanceof Error ? e.message : String(e);
     console.error("[agent]", e);
-    reply = "Perdón, tuve un problema para procesar tu mensaje. Ya quedó registrado; inténtalo de nuevo o llama a Dirección si es urgente.";
+    reply = e instanceof ModelTimeBudgetError
+      ? "La consulta alcanzó el tiempo límite y detuve la espera. Intenta una solicitud más concreta; si aparece una propuesta pendiente, revísala antes de confirmar."
+      : "Perdón, tuve un problema para procesar tu mensaje. Ya quedó registrado; inténtalo de nuevo o llama a Dirección si es urgente.";
   }
 
   await deliver(reply);
@@ -268,6 +271,7 @@ async function llmTurn(db: Db, input: AgentInput, ctx: ToolCtx, log: ToolCallLog
   let reply = "";
 
   for (let round = 0; round < MAX_ROUNDS; round++) {
+    assertModelBudget();
     const { output, text, calls, usage } = await chat(messages, specs);
     tokensIn += usage?.input_tokens ?? 0;
     tokensOut += usage?.output_tokens ?? 0;
@@ -278,6 +282,7 @@ async function llmTurn(db: Db, input: AgentInput, ctx: ToolCtx, log: ToolCallLog
       break;
     }
     for (const call of calls) {
+      assertModelBudget();
       const t0 = Date.now();
       let args: Record<string, unknown> = {};
       let result: unknown;
