@@ -273,7 +273,7 @@ export async function runScanAction(): Promise<FormState> {
   if (!["direccion", "administracion"].includes(staff.role)) throw new Error("Sólo Dirección y Administración pueden enviar avisos al equipo.");
   const r = await runProactiveScan(db, new Date());
   refresh();
-  return { ok: true, message: `Escaneo listo: ${r.insights} hallazgos, ${r.newAlerts} alertas nuevas enviadas.` };
+  return { ok: true, message: `Escaneo listo: ${r.insights} hallazgos, ${r.newAlerts} alertas nuevas registradas.` };
 }
 
 export async function sendBriefAction(): Promise<FormState> {
@@ -281,6 +281,8 @@ export async function sendBriefAction(): Promise<FormState> {
   if (!["direccion", "administracion"].includes(staff.role)) throw new Error("Sólo Dirección y Administración pueden enviar avisos al equipo.");
   const r = await sendDailyBrief(db, new Date());
   refresh();
+  if (r.failed) return { ok: false, message: `Resumen enviado a ${r.sent} persona(s); no se confirmó el envío a ${r.failed}. Revisa WhatsApp antes de reintentar.` };
+  if (r.simulated) return { ok: true, message: `Resumen simulado para ${r.simulated} persona(s); no se envió por WhatsApp.` };
   return { ok: true, message: `Resumen enviado a ${r.sent} persona(s).` };
 }
 

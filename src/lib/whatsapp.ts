@@ -12,21 +12,31 @@ export interface SendResult {
   error?: string;
 }
 
-async function post(body: unknown): Promise<SendResult> {
-  if (!hasWhatsApp) return { ok: true, simulated: true };
-  const res = await fetch(graph(`${env.waPhoneNumberId}/messages`), {
-    method: "POST",
-    headers: { Authorization: `Bearer ${env.waToken}`, "Content-Type": "application/json" },
-    body: JSON.stringify(body),
-  });
-  const json = (await res.json().catch(() => ({}))) as { messages?: { id: string }[]; error?: { message: string } };
-  if (!res.ok) return { ok: false, error: json.error?.message ?? `HTTP ${res.status}` };
-  return { ok: true, id: json.messages?.[0]?.id };
+async function post(body: unknown, requireMessageId = false): Promise<SendResult> {
+  // La falta de configuración en producción nunca debe confundirse con un envío.
+  if (process.env.DEMO_MODE === "1") return { ok: true, simulated: true };
+  if (!env.waToken || !env.waPhoneNumberId) return { ok: false, error: "WhatsApp no está configurado." };
+  try {
+    const res = await fetch(graph(`${env.waPhoneNumberId}/messages`), {
+      method: "POST",
+      headers: { Authorization: `Bearer ${env.waToken}`, "Content-Type": "application/json" },
+      body: JSON.stringify(body),
+    });
+    const json = (await res.json().catch(() => ({}))) as { messages?: { id?: unknown }[]; error?: { message: string } } | null;
+    if (!res.ok) return { ok: false, error: json?.error?.message ?? `HTTP ${res.status}` };
+    const id = json?.messages?.[0]?.id;
+    if (requireMessageId && (typeof id !== "string" || !id.trim())) {
+      return { ok: false, error: "WhatsApp no confirmó el envío con un identificador de mensaje." };
+    }
+    return { ok: true, ...(typeof id === "string" && id.trim() ? { id } : {}) };
+  } catch {
+    return { ok: false, error: "No se pudo confirmar el envío con WhatsApp. Revisa su estado antes de reintentarlo." };
+  }
 }
 
 /** WhatsApp limita el cuerpo de texto a 4096 caracteres. */
 export function sendText(to: string, body: string) {
-  return post({ messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, 4096), preview_url: true } });
+  return post({ messaging_product: "whatsapp", to, type: "text", text: { body: body.slice(0, 4096), preview_url: true } }, true);
 }
 
 /**
@@ -44,7 +54,7 @@ export function sendTemplate(to: string, text: string) {
       language: { code: env.waTemplateLang },
       components: [{ type: "body", parameters: [{ type: "text", text: param }] }],
     },
-  });
+  }, true);
 }
 
 export function markRead(messageId: string) {

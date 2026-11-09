@@ -485,7 +485,9 @@ const enviarRevision: ReadTool = {
     if (!pend) throw new ToolError(`${c.code} no tiene revisiones pendientes.`);
     const assignee = pend.assigned_to ? await db.get("staff", pend.assigned_to) : null;
     const target = assignee ?? staff;
-    await sendToStaff(db, target, `🛠️ *${pend.title}* · ${fmt.dateTime(pend.scheduled_for)}\nÁbrela frente a la grúa: ${inspectionLink(pend.access_token)}`, "sistema");
+    const result = await sendToStaff(db, target, `🛠️ *${pend.title}* · ${fmt.dateTime(pend.scheduled_for)}\nÁbrela frente a la grúa: ${inspectionLink(pend.access_token)}`, "sistema");
+    if (!result?.ok) throw new ToolError(`No se confirmó el envío de la revisión por WhatsApp: ${result?.error ?? "el destinatario no tiene teléfono o está inactivo"}`);
+    if (result.simulated) return { simulado: true, mensaje: "Sólo se simuló el aviso; no se envió por WhatsApp.", revision: pend.title, enlace: inspectionLink(pend.access_token) };
     return { enviado_a: target.full_name, revision: pend.title, enlace: inspectionLink(pend.access_token) };
   },
 };

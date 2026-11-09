@@ -21,7 +21,9 @@ export async function sendToPhone(db: Db, phone: string, body: string, kind: WaM
     phone,
     staff_id: staffId,
     direction: "out",
-    body: result.ok ? body : `${body}\n\n[no enviado: ${result.error}]`,
+    body: result.simulated
+      ? `${body}\n\n[simulación: no enviado por WhatsApp]`
+      : result.ok ? body : `${body}\n\n[envío no confirmado: ${result.error}]`,
     kind,
     wa_message_id: result.id ?? null,
   });
@@ -56,7 +58,7 @@ export async function raiseAlert(
   const sentTo: string[] = [];
   for (const r of recipients) {
     const res = await sendToStaff(db, r, text);
-    if (res?.ok && r.phone) sentTo.push(r.phone);
+    if (res?.ok && !res.simulated && res.id && r.phone) sentTo.push(r.phone);
   }
   return db.insert("alerts", {
     dedupe_key: a.dedupe_key,

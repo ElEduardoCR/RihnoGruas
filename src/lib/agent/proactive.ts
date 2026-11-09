@@ -47,7 +47,7 @@ export async function runProactiveScan(db: Db, now: Date) {
 /** Resumen matutino personalizado para quien sigue el tema "resumen". */
 export async function sendDailyBrief(db: Db, now: Date) {
   const recipients = (await db.select("staff", { eq: { active: true, receives_alerts: true } })).filter((s) => s.phone && s.alert_topics.includes("resumen"));
-  if (!recipients.length) return { sent: 0 };
+  if (!recipients.length) return { sent: 0, failed: 0, simulated: 0 };
 
   const today = startOfDay(now);
   const tomorrow = addDays(today, 1);
@@ -70,6 +70,8 @@ export async function sendDailyBrief(db: Db, now: Date) {
   ].join("\n");
 
   let sent = 0;
+  let failed = 0;
+  let simulated = 0;
   for (const s of recipients) {
     const already = await db.select("wa_messages", { eq: { phone: s.phone!, kind: "resumen" }, gte: { created_at: today.toISOString() }, limit: 1 });
     if (already.length) continue;
@@ -91,8 +93,10 @@ export async function sendDailyBrief(db: Db, now: Date) {
     if (!body) {
       body = `☀️ *Buenos días, ${s.full_name.split(" ")[0]}.* Resumen de ${fmt.long(now)}:\n• ${facts.split("\n").slice(0, 5).join("\n• ")}${insights.length ? `\n${insights.slice(0, 4).map((i) => `${i.severity === "critica" ? "🚨" : "⚠️"} ${i.title}`).join("\n")}` : ""}`;
     }
-    await sendToStaff(db, s, body, "resumen");
-    sent++;
+    const result = await sendToStaff(db, s, body, "resumen");
+    if (result?.simulated) simulated++;
+    else if (result?.ok && result.id) sent++;
+    else failed++;
   }
-  return { sent };
+  return { sent, failed, simulated };
 }

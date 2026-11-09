@@ -10,6 +10,7 @@ import { fallbackAgent } from "./fallback";
 import { appendAppLink } from "./message-content";
 import { requireWebConversation } from "./conversation";
 import { requireOwnedAttachment } from "@/lib/services/agent-documents";
+import type { SendResult } from "@/lib/whatsapp";
 
 export interface AgentInput {
   phone: string;
@@ -32,6 +33,8 @@ export interface AgentReply {
   pending: string | null;
   pendingId: string | null;
   staff: Staff | null;
+  /** Sólo WhatsApp: distingue aceptación de Meta, simulación y fallo de entrega. */
+  delivery?: SendResult;
 }
 
 const PENDING_TTL_MS = 30 * 60_000;
@@ -67,9 +70,10 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
   }
   const incoming = persist ? await db.insert("wa_messages", { phone: input.phone, staff_id: staff?.id ?? null, direction: "in", body: input.text || "[mensaje sin texto]", kind: "chat", wa_message_id: input.waMessageId ?? null, conversation_id: input.conversationId ?? null }) : null;
 
+  let delivery: SendResult | undefined;
   const deliver = async (reply: string) => {
     if (!persist) return;
-    if (input.trigger === "whatsapp") await sendToPhone(db, input.phone, reply, "chat", staff?.id ?? null);
+    if (input.trigger === "whatsapp") delivery = await sendToPhone(db, input.phone, reply, "chat", staff?.id ?? null);
     else await db.insert("wa_messages", { phone: input.phone, staff_id: staff?.id ?? null, direction: "out", body: reply, kind: "chat", wa_message_id: null, conversation_id: input.conversationId ?? null });
   };
 
@@ -78,7 +82,7 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
       ? "Tu usuario no tiene acceso activo al asistente. Pide a Administración que revise tu acceso."
       : "Hola 👋 Este número no está registrado en Grúas Rhino. Pide a Administración que te den de alta para usar el asistente.";
     await deliver(reply);
-    return { reply, toolCalls: [], pending: null, pendingId: null, staff: null };
+    return { reply, toolCalls: [], pending: null, pendingId: null, staff: null, delivery };
   }
 
   const ctx: ToolCtx = { db, now, staff, channel: input.trigger === "whatsapp" ? "whatsapp" : "web", conversationId: input.conversationId, attachmentId: input.attachmentId };
@@ -140,6 +144,7 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
     if (step.name === "navegar_app") reply = appendAppLink(reply, step.result, env.appUrl);
   }
   await deliver(reply);
+  if (delivery && !delivery.ok) error = [error, `Entrega WhatsApp no confirmada: ${delivery.error}`].filter(Boolean).join("\n");
   if (persist) {
     await db.insert("agent_runs", {
       trigger: input.trigger,
@@ -161,7 +166,7 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
     pendingSummary = savedPending?.staff_id === staff.id ? savedPending.summary : null;
     pendingId = savedPending?.staff_id === staff.id ? savedPending.id : null;
   }
-  return { reply, toolCalls, pending: pendingSummary, pendingId, staff };
+  return { reply, toolCalls, pending: pendingSummary, pendingId, staff, delivery };
 }
 
 async function activePending(db: Db, phone: string, now: Date) {
