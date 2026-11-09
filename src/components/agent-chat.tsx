@@ -1,9 +1,9 @@
 "use client";
 
 import Link from "next/link";
-import { useEffect, useRef, useState, useTransition } from "react";
+import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
 import { ArrowRight, ArrowUp, Boxes, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardCheck, Loader2, MessageSquare, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
-import { agentChatAction, loadConversationAction } from "@/app/actions";
+import { agentChatAction, loadConversationAction, openConversationAction } from "@/app/actions";
 import type { StaffRole, ToolCallLog } from "@/lib/types";
 import { parseMessageContent } from "@/lib/agent/message-content";
 import { RhinoMark } from "./brand";
@@ -18,10 +18,14 @@ interface Msg {
   tools?: ToolCallLog[];
 }
 
+interface ConversationMemory {
+  summary: string;
+  conversationId: string;
+  createdAt: string;
+}
+
 interface Props {
-  initial: Msg[];
-  initialPending: { id: string; summary: string } | null;
-  user: { name: string; role: StaffRole; roleLabel: string };
+  user: { id: string; name: string; role: StaffRole; roleLabel: string };
   ai: boolean;
   demo: boolean;
 }
@@ -60,6 +64,7 @@ const TOOL_LABELS: Record<string, string> = {
   cancelar_renta: "Cancelar la renta",
   registrar_conteo: "Registrar conteo físico del almacén",
   navegar_app: "Preparar acceso directo",
+  consultar_memoria: "Consultar conversaciones anteriores",
 };
 
 /** Formato compartido con WhatsApp, sin interpretar HTML generado por el modelo. */
@@ -94,18 +99,99 @@ function Activity({ tools }: { tools: ToolCallLog[] }) {
   </details>;
 }
 
-export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
-  const [messages, setMessages] = useState<Msg[]>(initial);
+export function AgentChat({ user, ai, demo }: Props) {
+  const [messages, setMessages] = useState<Msg[]>([]);
   const [text, setText] = useState("");
-  const [pendingAction, setPendingAction] = useState(initialPending);
+  const [pendingAction, setPendingAction] = useState<{ id: string; summary: string } | null>(null);
+  const [memory, setMemory] = useState<ConversationMemory | null>(null);
   const [pending, start] = useTransition();
+  const [initializing, setInitializing] = useState(true);
+  const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const visitRef = useRef<string | null>(null);
+  const visitGeneration = useRef(0);
+  const openedRef = useRef(false);
+  const needsReconciliation = useRef(false);
   const sendLock = useRef(false);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
-  const busy = pending || loading;
+  const busy = pending || loading || initializing;
   const manager = ["direccion", "administracion"].includes(user.role);
+
+  const reconcileCurrentVisit = useCallback(async () => {
+    const conversationId = visitRef.current;
+    const generation = visitGeneration.current;
+    if (!conversationId || !openedRef.current) return;
+    try {
+      const state = await loadConversationAction({ conversationId });
+      if (visitRef.current !== conversationId || visitGeneration.current !== generation) return;
+      needsReconciliation.current = false;
+      setPendingAction(state.pending);
+      setMemory(state.memory);
+    } catch {
+      if (visitRef.current === conversationId && visitGeneration.current === generation) setError("Una solicitud anterior terminó. Actualiza la conversación para revisar su resultado antes de continuar.");
+    }
+  }, []);
+
+  useLayoutEffect(() => {
+    let disposed = false;
+    const clearVisit = () => {
+      visitRef.current = null;
+      openedRef.current = false;
+      sendLock.current = false;
+      setMessages([]);
+      setText("");
+      setPendingAction(null);
+      setMemory(null);
+      setError(null);
+      setLoading(false);
+      setReady(false);
+      setInitializing(true);
+    };
+    const activate = () => {
+      const generation = ++visitGeneration.current;
+      clearVisit();
+      // La precarga no ejecuta efectos. Strict Mode cancela su primer montaje
+      // antes de esta microtarea, sin crear una conversación duplicada.
+      queueMicrotask(async () => {
+        if (disposed || generation !== visitGeneration.current) return;
+        const conversationId = crypto.randomUUID();
+        visitRef.current = conversationId;
+        try {
+          const state = await openConversationAction({ conversationId });
+          if (disposed || generation !== visitGeneration.current || visitRef.current !== conversationId) return;
+          openedRef.current = true;
+          setPendingAction(state.pending);
+          setMemory(state.memory);
+          setReady(true);
+          if (needsReconciliation.current) await reconcileCurrentVisit();
+        } catch {
+          if (!disposed && generation === visitGeneration.current) setError("No se pudo preparar la conversación. Revisa tu conexión y vuelve a intentarlo.");
+        } finally {
+          if (!disposed && generation === visitGeneration.current) setInitializing(false);
+        }
+      });
+    };
+    const hide = () => {
+      ++visitGeneration.current;
+      clearVisit();
+    };
+    const show = (event: PageTransitionEvent) => {
+      if (event.persisted) activate();
+    };
+    activate();
+    window.addEventListener("pagehide", hide);
+    window.addEventListener("pageshow", show);
+    return () => {
+      disposed = true;
+      window.removeEventListener("pagehide", hide);
+      window.removeEventListener("pageshow", show);
+      // Activity conserva el componente al navegar: se limpia la visita,
+      // pero las propuestas y la memoria continúan guardadas en el servidor.
+      hide();
+    };
+  }, [user.id, reconcileCurrentVisit]);
 
   useEffect(() => {
     endRef.current?.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "instant" : "smooth", block: "nearest" });
@@ -121,34 +207,61 @@ export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
 
   const reload = async () => {
     if (sendLock.current || busy) return;
+    const conversationId = visitRef.current;
+    const generation = visitGeneration.current;
+    if (!conversationId) return;
     setLoading(true);
     setError(null);
     try {
-      const state = await loadConversationAction();
+      const state = openedRef.current
+        ? await loadConversationAction({ conversationId })
+        : await openConversationAction({ conversationId });
+      if (visitRef.current !== conversationId || visitGeneration.current !== generation) return;
+      openedRef.current = true;
       setMessages(state.messages);
       setPendingAction(state.pending);
+      setMemory(state.memory);
+      setReady(true);
+      if (needsReconciliation.current) await reconcileCurrentVisit();
     } catch {
-      setError("No se pudo actualizar la conversación. Revisa tu conexión e inténtalo de nuevo.");
-    } finally { setLoading(false); }
+      if (visitRef.current === conversationId && visitGeneration.current === generation) setError("No se pudo actualizar la conversación. Revisa tu conexión e inténtalo de nuevo.");
+    } finally {
+      if (visitRef.current === conversationId && visitGeneration.current === generation) setLoading(false);
+    }
   };
 
   const send = (value: string) => {
     const body = value.trim();
-    if (!body || busy || error || sendLock.current || body.length > 6000) return;
+    const conversationId = visitRef.current;
+    const generation = visitGeneration.current;
+    if (!body || !conversationId || !ready || busy || error || sendLock.current || body.length > 6000) return;
     sendLock.current = true;
     setError(null);
     setText("");
     setMessages((current) => [...current, { id: crypto.randomUUID(), direction: "in", body, created_at: new Date().toISOString() }]);
     start(async () => {
       try {
-        const response = await agentChatAction({ text: body, expectedPendingId: pendingAction?.id });
+        const response = await agentChatAction({ text: body, expectedPendingId: pendingAction?.id, conversationId });
+        if (visitRef.current !== conversationId || visitGeneration.current !== generation) {
+          // Una operación iniciada antes de salir puede dejar una propuesta.
+          // Recuperamos su estado sin traer el texto de la visita anterior.
+          needsReconciliation.current = true;
+          await reconcileCurrentVisit();
+          return;
+        }
         setMessages((current) => [...current, { id: crypto.randomUUID(), direction: "out", body: response.reply, created_at: new Date().toISOString(), tools: response.toolCalls }]);
         setPendingAction(response.pending && response.pendingId ? { id: response.pendingId, summary: response.pending } : null);
       } catch {
-        setError("No recibimos el resultado. Actualiza la conversación antes de repetir la solicitud para comprobar si se procesó.");
+        if (visitRef.current === conversationId && visitGeneration.current === generation) setError("No recibimos el resultado. Actualiza la conversación antes de repetir la solicitud para comprobar si se procesó.");
+        else {
+          needsReconciliation.current = true;
+          await reconcileCurrentVisit();
+        }
       } finally {
-        sendLock.current = false;
-        inputRef.current?.focus();
+        if (visitRef.current === conversationId && visitGeneration.current === generation) {
+          sendLock.current = false;
+          inputRef.current?.focus();
+        }
       }
     });
   };
@@ -183,7 +296,7 @@ export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
       </div>
       <div className="flex items-center gap-2">
         <span className="hidden text-[12px] text-muted sm:inline">{user.roleLabel}</span>
-        <button onClick={reload} disabled={busy} type="button" aria-label="Actualizar conversación" title="Actualizar conversación" className="grid size-11 place-items-center rounded-xl text-muted transition hover:bg-canvas hover:text-ink disabled:opacity-40"><RefreshCw className={cx("size-4", loading && "animate-spin")} /></button>
+        <button onClick={reload} disabled={busy} type="button" aria-label="Actualizar conversación" title="Actualizar conversación" className="grid size-11 place-items-center rounded-xl text-muted transition hover:bg-canvas hover:text-ink disabled:opacity-40"><RefreshCw className={cx("size-4", (loading || initializing) && "animate-spin")} /></button>
       </div>
     </header>
 
@@ -193,9 +306,14 @@ export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
           <div className="mb-6 flex items-center gap-2 text-[13px] font-medium text-muted"><span className="size-1.5 rounded-full bg-rhino-500" /> TU ESPACIO DE TRABAJO</div>
           <h1 className="text-[30px] leading-[1.16] font-semibold tracking-[-0.04em] sm:text-[42px]">¿Qué hacemos hoy,<br className="sm:hidden" />{" "}{user.name.split(" ")[0]}?</h1>
           <p className="mt-4 max-w-[550px] text-[15px] leading-7 text-muted">{ai ? "Cuéntame qué necesitas. Reviso si se puede hacer, te guío con los datos que falten y me encargo de la operación." : "Consulta tu operación en lenguaje sencillo. Por ahora puedo revisar datos; para registrar cambios por chat hace falta activar la IA."}</p>
+          {initializing && <p role="status" className="mt-4 text-[13px] text-muted">Preparando una conversación nueva…</p>}
+          {memory && <details key={memory.conversationId} className="mt-5 rounded-2xl border border-line text-[13px]">
+            <summary className="flex cursor-pointer list-none items-center gap-2 px-4 py-3 font-medium [&::-webkit-details-marker]:hidden"><MessageSquare className="size-4 text-muted" aria-hidden="true" />Última conversación<time dateTime={memory.createdAt} className="ml-auto text-xs font-normal text-muted">{new Date(memory.createdAt).toLocaleDateString("es-MX", { day: "numeric", month: "short" })}</time><ChevronDown className="size-4 text-muted" aria-hidden="true" /></summary>
+            <div className="max-h-48 overflow-y-auto border-t border-line px-4 py-3 leading-6 whitespace-pre-wrap"><MessageText text={memory.summary} /></div>
+          </details>}
         </div>
         <div className="grid grid-cols-1 gap-2.5 sm:grid-cols-2">
-          {suggestions.map(({ title, text: suggestion, icon: Icon }) => <button key={title} onClick={() => send(suggestion)} disabled={busy} type="button" className="group flex min-h-[70px] items-center gap-3 rounded-2xl border border-line px-4 py-4 text-left transition hover:border-line-2 hover:bg-canvas disabled:opacity-50 sm:min-h-[82px]">
+          {suggestions.map(({ title, text: suggestion, icon: Icon }) => <button key={title} onClick={() => send(suggestion)} disabled={busy || !ready || Boolean(error)} type="button" className="group flex min-h-[70px] items-center gap-3 rounded-2xl border border-line px-4 py-4 text-left transition hover:border-line-2 hover:bg-canvas disabled:opacity-50 sm:min-h-[82px]">
             <Icon className="size-[18px] shrink-0 text-muted" strokeWidth={1.6} />
             <span className="flex-1 text-[14px] font-medium">{title}</span>
             <ArrowRight className="size-4 shrink-0 text-muted opacity-0 transition group-hover:opacity-100 group-focus-visible:opacity-100" />
@@ -220,8 +338,8 @@ export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
         <div className="mb-2 flex items-center gap-2 text-[13px] font-semibold"><ShieldCheck className="size-4 text-rhino-600" /> Lista para tu confirmación</div>
         <div className="text-[13px] leading-6 whitespace-pre-wrap"><MessageText text={pendingAction.summary} /></div>
         <div className="mt-3 flex flex-wrap gap-2">
-          <button type="button" onClick={() => send("SÍ")} disabled={busy || Boolean(error)} className="min-h-11 rounded-xl bg-ink px-4 text-[13px] font-medium text-white hover:bg-ink-2 disabled:opacity-50">Confirmar y ejecutar</button>
-          <button type="button" onClick={() => send("NO")} disabled={busy || Boolean(error)} className="min-h-11 rounded-xl border border-line-2 bg-white px-4 text-[13px] font-medium hover:bg-canvas disabled:opacity-50">Cancelar acción</button>
+          <button type="button" onClick={() => send("SÍ")} disabled={busy || !ready || Boolean(error)} className="min-h-11 rounded-xl bg-ink px-4 text-[13px] font-medium text-white hover:bg-ink-2 disabled:opacity-50">Confirmar y ejecutar</button>
+          <button type="button" onClick={() => send("NO")} disabled={busy || !ready || Boolean(error)} className="min-h-11 rounded-xl border border-line-2 bg-white px-4 text-[13px] font-medium hover:bg-canvas disabled:opacity-50">Cancelar acción</button>
         </div>
       </div>}
       {error && <div role="alert" className="mb-3 rounded-xl bg-warn-soft p-3 text-[13px] leading-5 text-ink-2">{error} <button type="button" onClick={reload} disabled={busy} className="mt-1 block min-h-9 font-semibold underline underline-offset-2">Actualizar conversación</button></div>}
@@ -232,7 +350,7 @@ export function AgentChat({ initial, initialPending, user, ai, demo }: Props) {
         }} />
         <div className="mt-1 flex items-center justify-between gap-3 pl-2">
           <div className="flex items-center gap-1.5 text-[12px] text-muted"><MessageSquare className="size-3.5" /> {ai ? "Asistente con IA" : "Modo consulta"}</div>
-          <button type="submit" disabled={!text.trim() || busy || Boolean(error)} aria-label="Enviar mensaje" className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white transition hover:bg-ink-2 disabled:bg-line disabled:text-muted">{pending ? <Loader2 className="size-5 animate-spin" /> : <ArrowUp className="size-5" />}</button>
+          <button type="submit" disabled={!text.trim() || !ready || busy || Boolean(error)} aria-label="Enviar mensaje" className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white transition hover:bg-ink-2 disabled:bg-line disabled:text-muted">{pending ? <Loader2 className="size-5 animate-spin" /> : <ArrowUp className="size-5" />}</button>
         </div>
       </form>
       <div id="rhino-composer-help" className="mt-2.5 flex flex-wrap items-center justify-center gap-x-1 text-center text-[11px] leading-5 text-muted">

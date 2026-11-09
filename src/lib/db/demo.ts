@@ -1,4 +1,4 @@
-import type { TableName, Tables } from "@/lib/types";
+import type { AgentConversation, TableName, Tables, WaMessage } from "@/lib/types";
 import { buildSeed, type SeedData } from "@/lib/demo/seed";
 import { buildFleetPreview } from "@/lib/fleet/preview";
 import type { Bucket, Db, Query, Scalar, StoredFile } from "./types";
@@ -68,6 +68,14 @@ function withDefaults<T extends TableName>(table: T, row: Partial<Tables[T]>): T
   for (const k of ARRAY_DEFAULTS[table] ?? []) r[k] ??= [];
   if (table === "inspections") r.access_token ??= randomHex(18);
   if (table === "inventory_counts") r.variance = Number(r.counted_qty) - Number(r.system_qty);
+  if (table === "agent_conversations") {
+    r.message_count ??= 0;
+    r.last_message_at ??= null;
+    r.summary ??= null;
+    r.summary_message_count ??= 0;
+    r.summary_updated_at ??= null;
+  }
+  if (table === "wa_messages") r.conversation_id ??= null;
   return r as unknown as Tables[T];
 }
 
@@ -75,7 +83,44 @@ const clone = <T>(v: T): T => structuredClone(v);
 
 export function demoDb(): Db {
   const s = state();
+  // The dev server may retain demo state across this schema addition.
+  s.tables.agent_conversations ??= [];
   const rows = <T extends TableName>(t: T) => s.tables[t] as Tables[T][];
+
+  function validateConversation(row: AgentConversation) {
+    if (!rows("staff").some((staff) => staff.id === row.staff_id) || row.phone !== `web:${row.staff_id}`) throw new Error("La conversación no corresponde a un empleado válido.");
+    if (!Number.isInteger(row.message_count) || row.message_count < 0 || !Number.isInteger(row.summary_message_count) || row.summary_message_count < 0 || row.summary_message_count > row.message_count) throw new Error("El contador del resumen no corresponde a los mensajes.");
+    if (row.summary !== null && (typeof row.summary !== "string" || Array.from(row.summary).length > 6000)) throw new Error("El resumen supera el límite de 6,000 caracteres.");
+  }
+
+  function prepareInserts<T extends TableName>(table: T, list: Tables[T][]) {
+    if (table === "agent_conversations") {
+      const ids = new Set(rows("agent_conversations").map((row) => row.id));
+      for (const entry of list) {
+        const conversation = entry as AgentConversation;
+        if (ids.has(conversation.id)) throw new Error('duplicate key value violates unique constraint "agent_conversations_pkey"');
+        validateConversation(conversation);
+        ids.add(conversation.id);
+      }
+    }
+    if (table !== "wa_messages") return;
+    const updates = new Map<string, AgentConversation>();
+    for (const entry of list) {
+      const message = entry as WaMessage;
+      if (!message.conversation_id) continue;
+      const current = updates.get(message.conversation_id) ?? rows("agent_conversations").find((row) => row.id === message.conversation_id);
+      if (!current || current.staff_id !== message.staff_id || current.phone !== message.phone) throw new Error("La conversación no corresponde al empleado y canal del mensaje.");
+      updates.set(current.id, {
+        ...current, message_count: current.message_count + 1,
+        last_message_at: !current.last_message_at || Date.parse(message.created_at) > Date.parse(current.last_message_at) ? message.created_at : current.last_message_at,
+      });
+    }
+    // Validate the whole batch before changing counters, mirroring one SQL transaction.
+    for (const [id, conversation] of updates) {
+      const index = rows("agent_conversations").findIndex((row) => row.id === id);
+      rows("agent_conversations")[index] = conversation;
+    }
+  }
 
   return {
     mode: "demo",
@@ -132,7 +177,9 @@ export function demoDb(): Db {
           return ascending ? cmp(va, vb) : cmp(vb, va);
         });
       }
-      if (q?.limit) out = out.slice(0, q.limit);
+      if (q?.offset !== undefined) out = out.slice(q.offset);
+      if (q?.limit !== undefined) out = out.slice(0, q.limit);
+      else if (q?.offset !== undefined) out = out.slice(0, 100);
       return clone(out);
     },
 
@@ -143,12 +190,14 @@ export function demoDb(): Db {
 
     async insert(table, row) {
       const full = withDefaults(table, row);
+      prepareInserts(table, [full]);
       rows(table).push(full);
       return clone(full);
     },
 
     async insertMany(table, list) {
       const full = list.map((r) => withDefaults(table, r));
+      prepareInserts(table, full);
       rows(table).push(...full);
       return clone(full);
     },
@@ -157,7 +206,9 @@ export function demoDb(): Db {
       const list = rows(table);
       const i = list.findIndex((x) => (x as { id: string }).id === id);
       if (i < 0) throw new Error(`[demo] ${table} ${id} no existe`);
-      list[i] = { ...list[i], ...patch };
+      const updated = { ...list[i], ...patch };
+      if (table === "agent_conversations") validateConversation(updated as AgentConversation);
+      list[i] = updated;
       return clone(list[i]);
     },
 
@@ -166,7 +217,9 @@ export function demoDb(): Db {
       const i = list.findIndex((row) => row.id === id && matches(row as unknown as Record<string, unknown>, { eq: expected }));
       if (i < 0) return null;
       // Compare and write synchronously, so concurrent confirmations cannot both win.
-      list[i] = { ...list[i], ...patch };
+      const updated = { ...list[i], ...patch };
+      if (table === "agent_conversations") validateConversation(updated as AgentConversation);
+      list[i] = updated;
       return clone(list[i]);
     },
 

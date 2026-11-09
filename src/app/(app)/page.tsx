@@ -4,7 +4,6 @@ import { connection } from "next/server";
 import { AgentChat } from "@/components/agent-chat";
 import { currentStaff } from "@/lib/auth";
 import { getDb } from "@/lib/db";
-import { webAgentContext, webConversation } from "@/lib/agent/conversation";
 import { hasOpenAI, isDemo } from "@/lib/env";
 import { ROLE_LABELS } from "@/lib/labels";
 
@@ -25,11 +24,9 @@ async function Workspace() {
       <Link href="/login" className="font-medium text-rhino-600 underline">Iniciar sesión</Link>
     </div>
   );
-  const conversation = await webConversation(await webAgentContext());
   return <AgentChat
-    initial={conversation.messages}
-    initialPending={conversation.pending}
-    user={{ name: me.full_name, role: me.role, roleLabel: ROLE_LABELS[me.role] }}
+    key={me.id}
+    user={{ id: me.id, name: me.full_name, role: me.role, roleLabel: ROLE_LABELS[me.role] }}
     ai={hasOpenAI}
     demo={isDemo}
   />;

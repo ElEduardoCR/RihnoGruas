@@ -378,8 +378,21 @@ export interface InventoryCount {
   created_at: string;
 }
 
+export interface AgentConversation {
+  id: string;
+  staff_id: string;
+  phone: string;
+  created_at: string;
+  message_count: number;
+  last_message_at: string | null;
+  summary: string | null;
+  summary_message_count: number;
+  summary_updated_at: string | null;
+}
+
 export interface WaMessage {
   id: string;
+  conversation_id?: string | null;
   phone: string;
   staff_id: string | null;
   direction: "in" | "out";
@@ -469,6 +482,7 @@ export interface Tables {
   purchase_items: PurchaseItem;
   inventory_movements: InventoryMovement;
   inventory_counts: InventoryCount;
+  agent_conversations: AgentConversation;
   wa_messages: WaMessage;
   agent_runs: AgentRun;
   agent_pending_actions: PendingAction;

@@ -19,7 +19,8 @@ function applyQuery(builder: any, q?: Query) {
   for (const k of q.isNull ?? []) builder = builder.is(k, null);
   for (const k of q.notNull ?? []) builder = builder.not(k, "is", null);
   if (q.order) builder = builder.order(q.order.column, { ascending: q.order.ascending ?? true });
-  if (q.limit) builder = builder.limit(q.limit);
+  if (q.offset !== undefined) builder = builder.range(q.offset, q.offset + (q.limit ?? 100) - 1);
+  else if (q.limit !== undefined) builder = builder.limit(q.limit);
   return builder;
 }
 

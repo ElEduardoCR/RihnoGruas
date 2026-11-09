@@ -19,6 +19,7 @@ import { ToolError } from "./tool-error";
 import { CATALOG_EDIT_TOOLS } from "./catalog-tools";
 import { AGENDA_EDIT_TOOLS } from "./agenda-tools";
 import { INVENTORY_CATALOG_TOOLS } from "./inventory-catalog-tools";
+import { MEMORY_TOOLS } from "./memory-tools";
 
 export { ToolError } from "./tool-error";
 
@@ -971,6 +972,7 @@ export const TOOLS: Tool[] = [
   ...CATALOG_EDIT_TOOLS,
   ...AGENDA_EDIT_TOOLS,
   ...INVENTORY_CATALOG_TOOLS,
+  ...MEMORY_TOOLS,
 ];
 
 export function toolsFor(staff: Staff) {

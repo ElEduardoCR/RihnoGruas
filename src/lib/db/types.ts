@@ -16,6 +16,8 @@ export interface Query {
   notNull?: string[];
   order?: { column: string; ascending?: boolean };
   limit?: number;
+  /** Zero-based pagination; use with an explicit limit and stable ordering. */
+  offset?: number;
 }
 
 export interface StoredFile {
