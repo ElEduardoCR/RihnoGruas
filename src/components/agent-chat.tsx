@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, useTransition } from "react";
-import { ArrowRight, ArrowUp, Boxes, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardCheck, Loader2, MessageSquare, RefreshCw, ShieldCheck, Wrench } from "lucide-react";
+import { ArrowRight, ArrowUp, Boxes, CalendarDays, Check, ChevronDown, CircleHelp, ClipboardCheck, FileText, Loader2, MessageSquare, Paperclip, RefreshCw, ShieldCheck, Wrench, X } from "lucide-react";
 import { agentChatAction, loadConversationAction, openConversationAction } from "@/app/actions";
 import type { StaffRole, ToolCallLog } from "@/lib/types";
 import { parseMessageContent } from "@/lib/agent/message-content";
@@ -23,6 +23,23 @@ interface ConversationMemory {
   conversationId: string;
   createdAt: string;
 }
+
+interface UploadedAttachment {
+  id: string;
+  fileName: string;
+  mimeType: string;
+  size: number;
+}
+
+interface SelectedAttachment {
+  file: File;
+  uploadId: string;
+  uploaded: UploadedAttachment | null;
+}
+
+const MAX_ATTACHMENT_BYTES = 3 * 1024 * 1024;
+const ATTACHMENT_TYPES = ["application/pdf", "image/jpeg", "image/png"];
+const DOCUMENT_REQUEST = "Lee este documento y prepara su registro en el expediente de la unidad correspondiente.";
 
 interface Props {
   user: { id: string; name: string; role: StaffRole; roleLabel: string };
@@ -65,6 +82,8 @@ const TOOL_LABELS: Record<string, string> = {
   registrar_conteo: "Registrar conteo físico del almacén",
   navegar_app: "Preparar acceso directo",
   consultar_memoria: "Consultar conversaciones anteriores",
+  consultar_archivo: "Leer el documento adjunto",
+  registrar_documento: "Registrar el documento en el expediente",
 };
 
 /** Formato compartido con WhatsApp, sin interpretar HTML generado por el modelo. */
@@ -109,11 +128,16 @@ export function AgentChat({ user, ai, demo }: Props) {
   const [ready, setReady] = useState(false);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [attachment, setAttachment] = useState<SelectedAttachment | null>(null);
+  const [attachmentError, setAttachmentError] = useState<string | null>(null);
+  const [documentStage, setDocumentStage] = useState<"uploading" | "reading" | null>(null);
   const visitRef = useRef<string | null>(null);
   const visitGeneration = useRef(0);
   const openedRef = useRef(false);
   const needsReconciliation = useRef(false);
   const sendLock = useRef(false);
+  const uploadAbortRef = useRef<AbortController | null>(null);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const endRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const busy = pending || loading || initializing;
@@ -137,6 +161,8 @@ export function AgentChat({ user, ai, demo }: Props) {
   useLayoutEffect(() => {
     let disposed = false;
     const clearVisit = () => {
+      uploadAbortRef.current?.abort();
+      uploadAbortRef.current = null;
       visitRef.current = null;
       openedRef.current = false;
       sendLock.current = false;
@@ -145,6 +171,9 @@ export function AgentChat({ user, ai, demo }: Props) {
       setPendingAction(null);
       setMemory(null);
       setError(null);
+      setAttachment(null);
+      setAttachmentError(null);
+      setDocumentStage(null);
       setLoading(false);
       setReady(false);
       setInitializing(true);
@@ -230,18 +259,62 @@ export function AgentChat({ user, ai, demo }: Props) {
     }
   };
 
-  const send = (value: string) => {
-    const body = value.trim();
+  const selectAttachment = (file: File | undefined) => {
+    if (!file || busy || !ready) return;
+    setAttachmentError(null);
+    if (!ATTACHMENT_TYPES.includes(file.type) && !(file.type === "" && /\.(?:pdf|jpe?g|png)$/i.test(file.name))) {
+      setAttachmentError("Elige un archivo PDF, JPG o PNG.");
+      return;
+    }
+    if (file.size === 0 || file.size > MAX_ATTACHMENT_BYTES) {
+      setAttachmentError(file.size === 0 ? "El archivo está vacío. Elige otro documento." : "El archivo supera los 3 MB. Elige una versión más pequeña.");
+      return;
+    }
+    const uploadFile = file.type ? file : new File([file], file.name, {
+      type: /\.pdf$/i.test(file.name) ? "application/pdf" : /\.png$/i.test(file.name) ? "image/png" : "image/jpeg",
+      lastModified: file.lastModified,
+    });
+    setAttachment({ file: uploadFile, uploadId: crypto.randomUUID(), uploaded: null });
+  };
+
+  const send = (value: string, includeAttachment = false) => {
+    const selected = includeAttachment && manager && ai ? attachment : null;
+    const body = value.trim() || (selected ? DOCUMENT_REQUEST : "");
     const conversationId = visitRef.current;
     const generation = visitGeneration.current;
     if (!body || !conversationId || !ready || busy || error || sendLock.current || body.length > 6000) return;
     sendLock.current = true;
     setError(null);
+    setAttachmentError(null);
     setText("");
-    setMessages((current) => [...current, { id: crypto.randomUUID(), direction: "in", body, created_at: new Date().toISOString() }]);
+    const messageId = crypto.randomUUID();
+    const displayBody = selected ? `${body}\n\n📎 ${selected.file.name}` : body;
+    setMessages((current) => [...current, { id: messageId, direction: "in", body: displayBody, created_at: new Date().toISOString() }]);
     start(async () => {
+      let agentStarted = false;
+      let uploadController: AbortController | null = null;
       try {
-        const response = await agentChatAction({ text: body, expectedPendingId: pendingAction?.id, conversationId });
+        let uploaded = selected?.uploaded ?? null;
+        if (selected && !uploaded) {
+          setDocumentStage("uploading");
+          uploadController = new AbortController();
+          uploadAbortRef.current = uploadController;
+          const form = new FormData();
+          form.set("file", selected.file);
+          form.set("conversationId", conversationId);
+          form.set("uploadId", selected.uploadId);
+          const response = await fetch("/api/agent/attachments", { method: "POST", body: form, credentials: "same-origin", signal: uploadController.signal });
+          const result = await response.json().catch(() => null) as { attachment?: UploadedAttachment; error?: string } | null;
+          if (!response.ok) throw new Error(result?.error || (response.status === 413 ? "El archivo supera el tamaño permitido de 3 MB." : "No se pudo adjuntar el archivo. Inténtalo de nuevo."));
+          if (!result?.attachment?.id) throw new Error("No se pudo comprobar la carga del archivo. Inténtalo de nuevo.");
+          uploaded = result.attachment;
+          if (visitRef.current !== conversationId || visitGeneration.current !== generation) return;
+          setAttachment((current) => current?.uploadId === selected.uploadId ? { ...current, uploaded } : current);
+        }
+        if (visitRef.current !== conversationId || visitGeneration.current !== generation) return;
+        if (selected) setDocumentStage("reading");
+        agentStarted = true;
+        const response = await agentChatAction({ text: body, expectedPendingId: pendingAction?.id, conversationId, ...(uploaded ? { attachmentId: uploaded.id } : {}) });
         if (visitRef.current !== conversationId || visitGeneration.current !== generation) {
           // Una operación iniciada antes de salir puede dejar una propuesta.
           // Recuperamos su estado sin traer el texto de la visita anterior.
@@ -251,17 +324,26 @@ export function AgentChat({ user, ai, demo }: Props) {
         }
         setMessages((current) => [...current, { id: crypto.randomUUID(), direction: "out", body: response.reply, created_at: new Date().toISOString(), tools: response.toolCalls }]);
         setPendingAction(response.pending && response.pendingId ? { id: response.pendingId, summary: response.pending } : null);
-      } catch {
-        if (visitRef.current === conversationId && visitGeneration.current === generation) setError("No recibimos el resultado. Actualiza la conversación antes de repetir la solicitud para comprobar si se procesó.");
-        else {
+        if (selected) setAttachment((current) => current?.uploadId === selected.uploadId ? null : current);
+      } catch (failure) {
+        if (visitRef.current === conversationId && visitGeneration.current === generation) {
+          if (agentStarted) setError(`No recibimos el resultado. Actualiza la conversación antes de repetir la solicitud para comprobar si se procesó.${selected ? " El adjunto sigue disponible." : ""}`);
+          else {
+            setMessages((current) => current.filter((message) => message.id !== messageId));
+            setText(value);
+            setAttachmentError(failure instanceof Error ? failure.message : "No se pudo adjuntar el archivo. Inténtalo de nuevo.");
+          }
+        } else if (agentStarted) {
           needsReconciliation.current = true;
           await reconcileCurrentVisit();
         }
       } finally {
         if (visitRef.current === conversationId && visitGeneration.current === generation) {
+          setDocumentStage(null);
           sendLock.current = false;
           inputRef.current?.focus();
         }
+        if (uploadAbortRef.current === uploadController) uploadAbortRef.current = null;
       }
     });
   };
@@ -328,7 +410,7 @@ export function AgentChat({ user, ai, demo }: Props) {
             {Boolean(message.tools?.length) && <Activity tools={message.tools!} />}
           </div>
         </article>)}
-        {pending && <div role="status" className="flex items-center gap-3 text-[14px] text-muted"><RhinoMark className="size-8" /><Loader2 className="size-4 animate-spin" /> Rhino está revisando tu solicitud…</div>}
+        {pending && <div role="status" className="flex items-center gap-3 text-[14px] text-muted"><RhinoMark className="size-8" /><Loader2 className="size-4 animate-spin" />{documentStage === "uploading" ? "Adjuntando documento…" : documentStage === "reading" ? "Leyendo documento…" : "Rhino está revisando tu solicitud…"}</div>}
         <div ref={endRef} />
       </div>}
     </div>
@@ -343,15 +425,29 @@ export function AgentChat({ user, ai, demo }: Props) {
         </div>
       </div>}
       {error && <div role="alert" className="mb-3 rounded-xl bg-warn-soft p-3 text-[13px] leading-5 text-ink-2">{error} <button type="button" onClick={reload} disabled={busy} className="mt-1 block min-h-9 font-semibold underline underline-offset-2">Actualizar conversación</button></div>}
-      <form className="rounded-[24px] border border-line-2 bg-[#fafafa] p-3 shadow-[0_3px_16px_rgb(0_0_0/0.03)] transition focus-within:border-ink focus-within:bg-white" onSubmit={(event) => { event.preventDefault(); send(text); }}>
+      {attachmentError && <div role="alert" className="mb-3 rounded-xl bg-warn-soft p-3 text-[13px] leading-5 text-ink-2">{attachmentError}</div>}
+      <form className="rounded-[24px] border border-line-2 bg-[#fafafa] p-3 shadow-[0_3px_16px_rgb(0_0_0/0.03)] transition focus-within:border-ink focus-within:bg-white" onSubmit={(event) => { event.preventDefault(); send(text, true); }}>
+        {attachment && <div className="mb-2 flex items-center gap-2 rounded-2xl border border-line bg-white px-3 py-2 text-[13px]">
+          <FileText className="size-4 shrink-0 text-muted" aria-hidden="true" />
+          <div className="min-w-0 flex-1"><div className="truncate font-medium" title={attachment.file.name}>{attachment.file.name}</div><div className="text-xs text-muted">{attachment.file.size < 1024 * 1024 ? `${Math.ceil(attachment.file.size / 1024)} KB` : `${(attachment.file.size / (1024 * 1024)).toFixed(1)} MB`}{attachment.uploaded ? " · Adjunto guardado para esta conversación" : " · Listo para enviar"}</div></div>
+          {attachment.uploaded && <a href={`/api/agent/attachments/${encodeURIComponent(attachment.uploaded.id)}`} target="_blank" rel="noopener noreferrer" className="inline-flex min-h-11 shrink-0 items-center px-2 font-medium text-rhino-600 underline underline-offset-2">Ver archivo</a>}
+          <button type="button" disabled={busy} onClick={() => { setAttachment(null); setAttachmentError(null); }} aria-label="Quitar documento adjunto" className="grid size-11 shrink-0 place-items-center rounded-xl text-muted hover:bg-canvas disabled:opacity-40"><X className="size-4" /></button>
+        </div>}
         <label htmlFor="rhino-message" className="sr-only">¿Qué necesitas hacer?</label>
-        <textarea id="rhino-message" ref={inputRef} value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} rows={2} placeholder="Pídele a Rhino lo que necesitas…" aria-describedby="rhino-composer-help" className="block min-h-[60px] w-full resize-none bg-transparent px-2 pt-1 text-[16px] leading-6 outline-none placeholder:text-muted" onKeyDown={(event) => {
-          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); send(text); }
+        <textarea id="rhino-message" ref={inputRef} value={text} onChange={(event) => setText(event.target.value)} maxLength={6000} rows={2} placeholder={attachment ? "Añade una indicación o envía el documento…" : "Pídele a Rhino lo que necesitas…"} aria-describedby="rhino-composer-help" className="block min-h-[60px] w-full resize-none bg-transparent px-2 pt-1 text-[16px] leading-6 outline-none placeholder:text-muted" onKeyDown={(event) => {
+          if (event.key === "Enter" && !event.shiftKey && !event.nativeEvent.isComposing && !window.matchMedia("(pointer: coarse)").matches) { event.preventDefault(); send(text, true); }
         }} />
         <div className="mt-1 flex items-center justify-between gap-3 pl-2">
-          <div className="flex items-center gap-1.5 text-[12px] text-muted"><MessageSquare className="size-3.5" /> {ai ? "Asistente con IA" : "Modo consulta"}</div>
-          <button type="submit" disabled={!text.trim() || !ready || busy || Boolean(error)} aria-label="Enviar mensaje" className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white transition hover:bg-ink-2 disabled:bg-line disabled:text-muted">{pending ? <Loader2 className="size-5 animate-spin" /> : <ArrowUp className="size-5" />}</button>
+          <div className="flex min-w-0 items-center gap-2">
+            {manager && ai && <>
+              <input ref={fileInputRef} type="file" accept="application/pdf,image/jpeg,image/png,.pdf,.jpg,.jpeg,.png" className="sr-only" aria-label="Documento PDF, JPG o PNG de hasta 3 MB" tabIndex={-1} disabled={busy || !ready || Boolean(error)} onChange={(event) => { selectAttachment(event.currentTarget.files?.[0]); event.currentTarget.value = ""; }} />
+              <button type="button" disabled={busy || !ready || Boolean(error)} onClick={() => fileInputRef.current?.click()} aria-label="Adjuntar documento" title="Adjuntar PDF, JPG o PNG, máximo 3 MB" className="grid size-11 shrink-0 place-items-center rounded-xl text-muted transition hover:bg-canvas hover:text-ink disabled:opacity-40"><Paperclip className="size-5" /></button>
+            </>}
+            <div className="flex items-center gap-1.5 text-[12px] text-muted"><MessageSquare className="size-3.5" /> {ai ? "Asistente con IA" : "Modo consulta"}</div>
+          </div>
+          <button type="submit" disabled={(!text.trim() && !attachment) || !ready || busy || Boolean(error)} aria-label="Enviar mensaje" className="grid size-11 shrink-0 place-items-center rounded-full bg-ink text-white transition hover:bg-ink-2 disabled:bg-line disabled:text-muted">{pending ? <Loader2 className="size-5 animate-spin" /> : <ArrowUp className="size-5" />}</button>
         </div>
+        {manager && ai && <p className="px-2 pt-1 text-[11px] leading-5 text-muted">PDF, JPG o PNG · hasta 3 MB. Revisa los datos que Rhino prepare antes de confirmar el registro.</p>}
       </form>
       <div id="rhino-composer-help" className="mt-2.5 flex flex-wrap items-center justify-center gap-x-1 text-center text-[11px] leading-5 text-muted">
         {demo ? "Estás en una demo. Los cambios se reinician al cerrar el servidor." : "Rhino usa tus permisos y verifica las reglas del ERP."}

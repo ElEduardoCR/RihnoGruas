@@ -66,4 +66,4 @@ export interface MaintenanceBundle {
   items: Partial<InspectionItem>[];
 }
 
-export type Bucket = "evidencias" | "documentos";
+export type Bucket = "evidencias" | "documentos" | "chat-adjuntos";

@@ -242,10 +242,10 @@ async function Dossier({ params }: { params: Promise<{ id: string }> }) {
                             <b className="font-medium">{fmt.date(doc.expires_on)}</b>
                           </>
                         ) : (
-                          <span className="text-muted">Permanente</span>
+                          <span className="text-muted">Vencimiento no registrado</span>
                         )}
                       </td>
-                      <td className="px-3 py-3">{doc.expires_on ? <DocHealthBadge health={s.health} days={s.days} /> : <Badge>N/A</Badge>}</td>
+                      <td className="px-3 py-3"><DocHealthBadge health={s.health} days={s.days} /></td>
                       <td className="px-3 py-3">
                         <div className="flex items-center gap-2">
                           {doc.file_path ? (

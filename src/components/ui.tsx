@@ -146,6 +146,7 @@ export function Badge({ children, tone = "neutral", className }: { children: Rea
 export function DocHealthBadge({ health, days }: { health: DocHealth; days?: number | null }) {
   if (health === "vencido") return <Badge tone="red">Vencido{days != null ? ` · hace ${Math.abs(days)} d` : ""}</Badge>;
   if (health === "por_vencer") return <Badge tone="amber">{days != null ? `Vence en ${days} d` : "Por vencer"}</Badge>;
+  if (health === "sin_fecha") return <Badge tone="neutral">Sin fecha de vencimiento</Badge>;
   return <Badge tone="green">Vigente</Badge>;
 }
 

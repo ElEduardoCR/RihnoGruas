@@ -1,6 +1,7 @@
 import type { NextRequest } from "next/server";
-import { getAdminDb } from "@/lib/db";
+import { getAdminDb, getDb } from "@/lib/db";
 import { createUserSupabase } from "@/lib/db";
+import { currentStaff } from "@/lib/auth";
 import { isDemo } from "@/lib/env";
 import type { Bucket } from "@/lib/db/types";
 
@@ -15,7 +16,7 @@ export async function GET(req: NextRequest, ctx: { params: Promise<{ bucket: str
     const supabase = await createUserSupabase();
     const { data } = await supabase.auth.getUser();
     const token = req.nextUrl.searchParams.get("t");
-    let allowed = Boolean(data.user);
+    let allowed = Boolean(data.user && (await currentStaff(await getDb()))?.active);
     if (!allowed && token && bucket === "evidencias") {
       const db = getAdminDb();
       const insp = await db.select("inspections", { eq: { access_token: token }, limit: 1 });

@@ -258,12 +258,12 @@ export async function registerCountAction(_: FormState, f: FormData): Promise<Fo
 // Agente
 // ---------------------------------------------------------------------------
 
-export async function agentChatAction(input: { text: string; conversationId: string; expectedPendingId?: string }) {
+export async function agentChatAction(input: { text: string; conversationId: string; expectedPendingId?: string; attachmentId?: string }) {
   if (typeof input?.text !== "string" || !input.text.trim()) throw new Error("Escribe qué necesitas hacer.");
   if (input.text.length > 6000) throw new Error("Resume tu solicitud en menos de 6,000 caracteres.");
   const { db, staff, phone } = await webAgentContext();
   await requireWebConversation(db, staff, input.conversationId);
-  const res = await runAgent(db, { phone, staffId: staff.id, conversationId: input.conversationId, text: input.text.trim(), trigger: "web", expectedPendingId: input.expectedPendingId });
+  const res = await runAgent(db, { phone, staffId: staff.id, conversationId: input.conversationId, attachmentId: input.attachmentId, text: input.text.trim(), trigger: "web", expectedPendingId: input.expectedPendingId });
   refresh();
   return { reply: res.reply, toolCalls: res.toolCalls, pending: res.pending, pendingId: res.pendingId };
 }

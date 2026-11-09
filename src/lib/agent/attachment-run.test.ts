@@ -1,0 +1,46 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+import { Responses, type Response } from "openai/resources/responses/responses";
+
+test("attachments are scoped before logging and an attached SÍ cannot confirm another operation", async (t) => {
+  process.env.OPENAI_API_KEY = "offline-attachment-test";
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("No network in attachment verification"); });
+  t.mock.method(Responses.prototype, "create", async () => ({ id: "attachment-response", status: "completed", output_text: "Voy a revisar el archivo; la propuesta anterior sigue pendiente.", output: [] }) as unknown as Response);
+  const { demoDb } = await import("@/lib/db/demo");
+  const { createChatAttachment } = await import("@/lib/services/agent-documents");
+  const { runAgent } = await import("./run");
+  const { toolByName } = await import("./tools");
+  const db = demoDb();
+  const staff = await db.insert("staff", { full_name: "Adjuntos de prueba", role: "direccion", active: true, phone: null, receives_alerts: false, alert_topics: [] });
+  const phone = `web:${staff.id}`;
+  const first = await db.insert("agent_conversations", { staff_id: staff.id, phone, message_count: 0 });
+  const second = await db.insert("agent_conversations", { staff_id: staff.id, phone, message_count: 0 });
+  const attachment = await createChatAttachment(db, staff, { conversationId: first.id, uploadId: crypto.randomUUID(), filename: "tarjeta-prueba.pdf", contentType: "application/pdf", bytes: Buffer.from("%PDF-1.7\nsynthetic fixture") });
+  const pending = await db.insert("agent_pending_actions", { phone, staff_id: staff.id, tool: "registrar_cliente", args: { input: { name: "No debe crearse" } }, summary: "Crear un cliente", status: "pendiente", expires_at: new Date(Date.now() + 600_000).toISOString() });
+  const before = (await db.select("clients")).length;
+  const result = await runAgent(db, { trigger: "web", staffId: staff.id, phone, conversationId: first.id, text: "SÍ", expectedPendingId: pending.id, attachmentId: attachment.id });
+  assert.equal((await db.select("clients")).length, before);
+  assert.equal((await db.get("agent_pending_actions", pending.id))?.status, "pendiente");
+  assert.equal(result.pendingId, pending.id);
+  const messages = await db.select("wa_messages", { eq: { conversation_id: first.id } });
+  assert.match(messages[0].body, new RegExp(attachment.id));
+  assert.doesNotMatch(messages[0].body, /base64|synthetic fixture/);
+  const logged = (await db.select("wa_messages", { eq: { staff_id: staff.id } })).length;
+  await assert.rejects(runAgent(db, { trigger: "web", staffId: staff.id, phone, conversationId: second.id, text: "Registra", attachmentId: attachment.id }), /no está disponible/);
+  assert.equal((await db.select("wa_messages", { eq: { staff_id: staff.id } })).length, logged);
+  const other = await db.insert("staff", { full_name: "Otra cuenta de prueba", role: "direccion", active: true, phone: null, receives_alerts: false, alert_topics: [] });
+  const third = await db.insert("agent_conversations", { staff_id: other.id, phone: `web:${other.id}`, message_count: 0 });
+  await assert.rejects(runAgent(db, { trigger: "web", staffId: other.id, phone: `web:${other.id}`, conversationId: third.id, text: "Registra", attachmentId: attachment.id }), /no está disponible/);
+  assert.equal((await db.select("wa_messages", { eq: { staff_id: other.id } })).length, 0);
+
+  const tool = toolByName("registrar_grua");
+  assert.ok(tool?.kind === "write");
+  const args = { codigo: "PR-99", nombre: "Unidad sintética", tipo: "vehiculo_apoyo", marca: "Prueba", modelo: "Prueba", anio: null, capacidad_toneladas: null, numero_serie: null, vin: "1M8GDM9AXKP042788", placas: null, tarifa_diaria: null, notas: null };
+  const ctx = { db, staff, now: new Date(), channel: "web" as const };
+  const prepared = await tool.prepare(args, ctx);
+  assert.match(prepared.summary, /1M8GDM9AXKP042788/);
+  const created = await tool.execute(prepared.args, ctx);
+  assert.equal((await db.get("cranes", created.grua_id as string))?.vin, args.vin);
+  await assert.rejects(tool.prepare({ ...args, codigo: "PR-98" }, ctx), /Ya existe una unidad con ese NIV/);
+  await assert.rejects(tool.prepare({ ...args, codigo: "PR-97", vin: "INCOMPLETO" }, ctx), /17 caracteres/);
+});

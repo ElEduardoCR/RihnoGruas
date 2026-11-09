@@ -42,6 +42,7 @@ const ORDER: TableName[] = [
   "inventory_movements",
   "inventory_counts",
   "agent_conversations",
+  "agent_attachments",
   "wa_messages",
   "agent_runs",
   "agent_pending_actions",

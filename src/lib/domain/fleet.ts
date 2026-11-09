@@ -125,18 +125,19 @@ export function statusOnDay(craneId: string, dayStart: Date, events: FleetEvent[
   return "disponible";
 }
 
-export type DocHealth = "ok" | "por_vencer" | "vencido";
+export type DocHealth = "ok" | "por_vencer" | "vencido" | "sin_fecha";
 
 export function docStatus(doc: Pick<CraneDocument, "expires_on">, now: Date): { health: DocHealth; days: number | null } {
-  if (!doc.expires_on) return { health: "ok", days: null };
+  if (!doc.expires_on) return { health: "sin_fecha", days: null };
   const days = daysUntil(doc.expires_on, now);
   return { health: days < 0 ? "vencido" : days <= 30 ? "por_vencer" : "ok", days };
 }
 
-export function docsHealth(docs: CraneDocument[], now: Date): DocHealth {
+export function docsHealth(docs: ReadonlyArray<Pick<CraneDocument, "expires_on">>, now: Date): DocHealth {
   const states = docs.map((d) => docStatus(d, now).health);
   if (states.includes("vencido")) return "vencido";
   if (states.includes("por_vencer")) return "por_vencer";
+  if (states.includes("sin_fecha")) return "sin_fecha";
   return "ok";
 }
 

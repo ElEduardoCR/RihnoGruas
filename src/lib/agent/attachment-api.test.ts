@@ -1,0 +1,40 @@
+import test from "node:test";
+import assert from "node:assert/strict";
+
+test("chat upload and private download routes share the authenticated conversation", async (t) => {
+  process.env.DEMO_MODE = "1";
+  process.env.OPENAI_API_KEY = "offline-upload-route-test";
+  t.mock.method(globalThis, "fetch", async () => { throw new Error("No network in upload route verification"); });
+  const { webAgentContext, openWebConversation } = await import("./conversation");
+  const { POST } = await import("@/app/api/agent/attachments/route");
+  const { GET } = await import("@/app/api/agent/attachments/[id]/route");
+  const context = await webAgentContext();
+  const conversationId = crypto.randomUUID();
+  await openWebConversation(context, conversationId);
+  const uploadId = crypto.randomUUID();
+  const bytes = Buffer.from("%PDF-1.7\nroute fixture");
+  const request = (origin = "http://localhost:3000", contentType = "application/pdf") => {
+    const form = new FormData();
+    form.set("file", new File([bytes], "documento.pdf", { type: contentType }));
+    form.set("conversationId", conversationId);
+    form.set("uploadId", uploadId);
+    return new Request("http://localhost:3000/api/agent/attachments", { method: "POST", headers: { origin }, body: form });
+  };
+  assert.equal((await POST(request("https://another.example"))).status, 403);
+  assert.equal((await POST(request(undefined, "image/png"))).status, 400);
+  const uploaded = await POST(request());
+  assert.equal(uploaded.status, 200);
+  assert.deepEqual(await uploaded.json(), { attachment: { id: uploadId, fileName: "documento.pdf", mimeType: "application/pdf", size: bytes.length } });
+  assert.equal((await POST(request())).status, 200);
+  assert.equal((await context.db.select("agent_attachments", { eq: { id: uploadId } })).length, 1);
+  const downloaded = await GET(new Request(`http://localhost:3000/api/agent/attachments/${uploadId}`), { params: Promise.resolve({ id: uploadId }) });
+  assert.equal(downloaded.status, 200);
+  assert.equal(downloaded.headers.get("cache-control"), "private, no-store");
+  assert.equal(downloaded.headers.get("content-type"), "application/pdf");
+  assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), bytes);
+  const foreign = await context.db.insert("staff", { full_name: "Otra cuenta", role: "direccion", active: true, phone: null });
+  const foreignConversation = await context.db.insert("agent_conversations", { staff_id: foreign.id, phone: `web:${foreign.id}`, message_count: 0 });
+  const { createChatAttachment } = await import("@/lib/services/agent-documents");
+  const foreignAttachment = await createChatAttachment(context.db, foreign, { conversationId: foreignConversation.id, uploadId: crypto.randomUUID(), filename: "privado.pdf", contentType: "application/pdf", bytes });
+  assert.equal((await GET(new Request("http://localhost:3000"), { params: Promise.resolve({ id: foreignAttachment.id }) })).status, 404);
+});

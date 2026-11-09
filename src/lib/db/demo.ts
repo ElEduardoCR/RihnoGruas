@@ -1,4 +1,4 @@
-import type { AgentConversation, TableName, Tables, WaMessage } from "@/lib/types";
+import type { AgentAttachment, AgentConversation, TableName, Tables, WaMessage } from "@/lib/types";
 import { buildSeed, type SeedData } from "@/lib/demo/seed";
 import { buildFleetPreview } from "@/lib/fleet/preview";
 import type { Bucket, Db, Query, Scalar, StoredFile } from "./types";
@@ -76,6 +76,7 @@ function withDefaults<T extends TableName>(table: T, row: Partial<Tables[T]>): T
     r.summary_updated_at ??= null;
   }
   if (table === "wa_messages") r.conversation_id ??= null;
+  if (table === "agent_attachments") r.extraction ??= null;
   return r as unknown as Tables[T];
 }
 
@@ -85,6 +86,7 @@ export function demoDb(): Db {
   const s = state();
   // The dev server may retain demo state across this schema addition.
   s.tables.agent_conversations ??= [];
+  s.tables.agent_attachments ??= [];
   const rows = <T extends TableName>(t: T) => s.tables[t] as Tables[T][];
 
   function validateConversation(row: AgentConversation) {
@@ -94,6 +96,18 @@ export function demoDb(): Db {
   }
 
   function prepareInserts<T extends TableName>(table: T, list: Tables[T][]) {
+    if (table === "agent_attachments" || table === "crane_documents") {
+      const ids = new Set(rows(table).map((row) => row.id));
+      for (const entry of list) {
+        if (ids.has(entry.id)) throw new Error(`duplicate key value violates unique constraint "${table}_pkey"`);
+        ids.add(entry.id);
+        if (table === "agent_attachments") {
+          const attachment = entry as AgentAttachment;
+          const conversation = rows("agent_conversations").find((row) => row.id === attachment.conversation_id);
+          if (!conversation || conversation.staff_id !== attachment.staff_id || conversation.phone !== `web:${attachment.staff_id}`) throw new Error("El archivo no corresponde al dueño de la conversación.");
+        }
+      }
+    }
     if (table === "agent_conversations") {
       const ids = new Set(rows("agent_conversations").map((row) => row.id));
       for (const entry of list) {
@@ -241,6 +255,7 @@ export function demoDb(): Db {
     },
 
     async upload(bucket: Bucket, path: string, file: StoredFile) {
+      if ((bucket === "chat-adjuntos" || bucket === "documentos") && s.files.has(`${bucket}/${path}`)) throw new Error("[storage] The resource already exists");
       s.files.set(`${bucket}/${path}`, file);
     },
 

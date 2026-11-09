@@ -20,6 +20,7 @@ import { CATALOG_EDIT_TOOLS } from "./catalog-tools";
 import { AGENDA_EDIT_TOOLS } from "./agenda-tools";
 import { INVENTORY_CATALOG_TOOLS } from "./inventory-catalog-tools";
 import { MEMORY_TOOLS } from "./memory-tools";
+import { DOCUMENT_TOOLS } from "./document-tools";
 
 export { ToolError } from "./tool-error";
 
@@ -28,6 +29,8 @@ export interface ToolCtx {
   now: Date;
   staff: Staff;
   channel: Channel;
+  conversationId?: string;
+  attachmentId?: string;
 }
 
 type Args = Record<string, unknown>;
@@ -255,7 +258,7 @@ const consultarGrua: ReadTool = {
       detencion_abierta: d.downtimes.find((x) => !x.ended_at)?.reason ?? null,
       documentos: d.documents.map((doc) => {
         const s = docStatus(doc, now);
-        return { tipo: DOC_LABELS[doc.doc_type], numero: doc.number, emisor: doc.issuer, vence: doc.expires_on ? fmt.date(doc.expires_on) : "sin vencimiento", estado: s.health, dias: s.days };
+        return { tipo: DOC_LABELS[doc.doc_type], numero: doc.number, emisor: doc.issuer, vence: doc.expires_on ? fmt.date(doc.expires_on) : "no registrado", estado: s.health, dias: s.days };
       }),
       operadores_aprobados: d.operators.map((o) => ({
         nombre: o.staff.full_name,
@@ -528,7 +531,7 @@ const registrarGrua: WriteTool = {
   name: "registrar_grua",
   description: "Da de alta una unidad de la flotilla con código, nombre, tipo, marca y modelo. Capacidad, año, serie y tarifa pueden quedar pendientes; no los deduzcas del modelo. El alta no verifica documentos ni habilita operadores.",
   roles: MGMT,
-  parameters: obj({ codigo: str("Número económico único, incluido su prefijo"), nombre: str("Nombre de la unidad"), tipo: en(CRANE_TYPES, "Tipo de unidad"), marca: str("Marca"), modelo: str("Modelo"), anio: optNum("Año confirmado o null"), capacidad_toneladas: optNum("Capacidad verificada en toneladas o null"), numero_serie: optStr("Número de serie o null"), placas: optStr("Placas o null"), tarifa_diaria: optNum("Tarifa diaria en MXN o null"), notas: optStr("Notas o null") }),
+  parameters: obj({ codigo: str("Número económico único, incluido su prefijo"), nombre: str("Nombre de la unidad"), tipo: en(CRANE_TYPES, "Tipo de unidad"), marca: str("Marca"), modelo: str("Modelo"), anio: optNum("Año confirmado o null"), capacidad_toneladas: optNum("Capacidad verificada en toneladas o null"), numero_serie: optStr("Número de serie o null"), vin: optStr("NIV/VIN leído o indicado expresamente; null si falta"), placas: optStr("Placas o null"), tarifa_diaria: optNum("Tarifa diaria en MXN o null"), notas: optStr("Notas o null") }),
   async prepare(a, { db, staff }) {
     assertManager(staff);
     const code = textValue(a.codigo)?.toUpperCase().replace(/\s+/g, "-");
@@ -543,9 +546,12 @@ const registrarGrua: WriteTool = {
     if (a.anio != null && (!Number.isInteger(a.anio) || Number(a.anio) < 1950 || Number(a.anio) > 2100)) throw new ToolError("Indica un año válido.");
     if (a.capacidad_toneladas === 0) throw new ToolError("La capacidad debe ser mayor que cero o quedar pendiente.");
     if ((await db.select("cranes", { eq: { code } })).length) throw new ToolError(`Ya existe una unidad con el número económico ${code}.`);
-    const input: CraneInput = { code, name, type: a.tipo as CraneType, brand, model, year: (a.anio as number | null) ?? null, capacity_tons: (a.capacidad_toneladas as number | null) ?? null, serial_number: textValue(a.numero_serie), plates: textValue(a.placas), daily_rate: (a.tarifa_diaria as number | null) ?? null, notes: textValue(a.notas), boom_length_m: null, vin: null, hour_meter: null, odometer_km: null, service_interval_hours: null, last_service_hours: null, base_location: null, acquired_on: null, active: true };
+    const vin = textValue(a.vin)?.toUpperCase().replace(/[\s-]/g, "") ?? null;
+    if (vin && !/^[A-HJ-NPR-Z0-9]{17}$/.test(vin)) throw new ToolError("Revisa el NIV/VIN: debe tener 17 caracteres válidos; no lo completes por intuición.");
+    if (vin && (await db.select("cranes", { eq: { vin } })).length) throw new ToolError("Ya existe una unidad con ese NIV/VIN. Consulta su expediente antes de crear otra.");
+    const input: CraneInput = { code, name, type: a.tipo as CraneType, brand, model, year: (a.anio as number | null) ?? null, capacity_tons: (a.capacidad_toneladas as number | null) ?? null, serial_number: textValue(a.numero_serie), plates: textValue(a.placas), daily_rate: (a.tarifa_diaria as number | null) ?? null, notes: textValue(a.notas), boom_length_m: null, vin, hour_meter: null, odometer_km: null, service_interval_hours: null, last_service_hours: null, base_location: null, acquired_on: null, active: true };
     return {
-      summary: [`Registrar *${code} ${name}*: ${brand} ${model} · ${CRANE_TYPE_LABELS[input.type]}.`, `Capacidad: ${input.capacity_tons == null ? "pendiente" : `${input.capacity_tons} t`} · tarifa: ${input.daily_rate == null ? "pendiente" : `${money(input.daily_rate)}/día`}.`, `Año: ${input.year ?? "pendiente"} · serie: ${input.serial_number ?? "pendiente"} · placas: ${input.plates ?? "pendientes"}.`, ...(input.notes ? [`Notas: ${input.notes}`] : []), "El alta no verifica documentos, tabla de cargas ni operadores."].join("\n"),
+      summary: [`Registrar *${code} ${name}*: ${brand} ${model} · ${CRANE_TYPE_LABELS[input.type]}.`, `Capacidad: ${input.capacity_tons == null ? "pendiente" : `${input.capacity_tons} t`} · tarifa: ${input.daily_rate == null ? "pendiente" : `${money(input.daily_rate)}/día`}.`, `Año: ${input.year ?? "pendiente"} · serie: ${input.serial_number ?? "pendiente"} · NIV/VIN: ${input.vin ?? "pendiente"} · placas: ${input.plates ?? "pendientes"}.`, ...(input.notes ? [`Notas: ${input.notes}`] : []), "El alta no verifica documentos, tabla de cargas ni operadores."].join("\n"),
       args: { input },
     };
   },
@@ -973,6 +979,7 @@ export const TOOLS: Tool[] = [
   ...AGENDA_EDIT_TOOLS,
   ...INVENTORY_CATALOG_TOOLS,
   ...MEMORY_TOOLS,
+  ...DOCUMENT_TOOLS,
 ];
 
 export function toolsFor(staff: Staff) {

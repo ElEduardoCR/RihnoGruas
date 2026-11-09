@@ -595,6 +595,7 @@ export function buildSeed(now: Date): SeedData {
     inventory_movements: movements,
     inventory_counts: counts,
     agent_conversations: [],
+    agent_attachments: [],
     wa_messages: msgs,
     agent_runs: runs,
     agent_pending_actions: pending,

@@ -390,6 +390,19 @@ export interface AgentConversation {
   summary_updated_at: string | null;
 }
 
+export interface AgentAttachment {
+  id: string;
+  staff_id: string;
+  conversation_id: string;
+  file_name: string;
+  content_type: "application/pdf" | "image/jpeg" | "image/png";
+  byte_size: number;
+  sha256: string;
+  storage_path: string;
+  extraction: unknown | null;
+  created_at: string;
+}
+
 export interface WaMessage {
   id: string;
   conversation_id?: string | null;
@@ -483,6 +496,7 @@ export interface Tables {
   inventory_movements: InventoryMovement;
   inventory_counts: InventoryCount;
   agent_conversations: AgentConversation;
+  agent_attachments: AgentAttachment;
   wa_messages: WaMessage;
   agent_runs: AgentRun;
   agent_pending_actions: PendingAction;

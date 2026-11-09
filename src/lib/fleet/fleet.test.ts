@@ -2,9 +2,26 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { buildFleetPayload } from "./payload";
 import { importConflicts } from "./import-plan";
-import { serviceUsage } from "@/lib/domain/fleet";
+import { docsHealth, docStatus, serviceUsage } from "@/lib/domain/fleet";
 import { cancelRental, createRental, documentIssues, findAvailable, identificationIssue } from "@/lib/services/rentals";
 import { demoDb } from "@/lib/db/demo";
+
+test("an unrecorded expiration never certifies document validity", () => {
+  const now = new Date("2026-11-09T16:00:00.000Z");
+  const unknown = { expires_on: null };
+  const expired = { expires_on: "2026-10-01" };
+  const approaching = { expires_on: "2026-11-20" };
+  const current = { expires_on: "2027-11-09" };
+  assert.deepEqual(docStatus(unknown, now), { health: "sin_fecha", days: null });
+  assert.equal(docStatus(expired, now).health, "vencido");
+  assert.equal(docStatus(approaching, now).health, "por_vencer");
+  assert.equal(docStatus(current, now).health, "ok");
+  assert.equal(docsHealth([unknown], now), "sin_fecha");
+  assert.equal(docsHealth([current, unknown], now), "sin_fecha");
+  assert.equal(docsHealth([unknown, approaching], now), "por_vencer");
+  assert.equal(docsHealth([unknown, approaching, expired], now), "vencido");
+  assert.equal(docsHealth([current], now), "ok");
+});
 
 test("reported identities stay separate; uncertain National chassis do not become extra assets", () => {
   const p = buildFleetPayload();

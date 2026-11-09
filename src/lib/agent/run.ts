@@ -9,6 +9,7 @@ import { collectInsights, type Insight } from "./insights";
 import { fallbackAgent } from "./fallback";
 import { appendAppLink } from "./message-content";
 import { requireWebConversation } from "./conversation";
+import { requireOwnedAttachment } from "@/lib/services/agent-documents";
 
 export interface AgentInput {
   phone: string;
@@ -16,6 +17,7 @@ export interface AgentInput {
   staffId?: string;
   /** Visita web validada: separa el contexto visible del archivo histórico. */
   conversationId?: string;
+  attachmentId?: string;
   /** Propuesta que el usuario realmente está viendo al confirmar/cancelar en la web. */
   expectedPendingId?: string | null;
   text: string;
@@ -58,6 +60,11 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
     if (input.trigger !== "web" || !staff || input.phone !== `web:${staff.id}`) throw new Error("La conversación no corresponde a esta cuenta.");
     await requireWebConversation(db, staff, input.conversationId);
   }
+  if (input.attachmentId) {
+    if (input.trigger !== "web" || !staff || !input.conversationId) throw new Error("Adjunta el archivo desde tu conversación activa.");
+    const attachment = await requireOwnedAttachment(db, staff, input.attachmentId, input.conversationId);
+    input = { ...input, text: `${input.text}\n\nArchivo adjunto: ${attachment.file_name}. ID para consultar_archivo: ${attachment.id}. [Ver archivo](${env.appUrl}/api/agent/attachments/${attachment.id})` };
+  }
   const incoming = persist ? await db.insert("wa_messages", { phone: input.phone, staff_id: staff?.id ?? null, direction: "in", body: input.text || "[mensaje sin texto]", kind: "chat", wa_message_id: input.waMessageId ?? null, conversation_id: input.conversationId ?? null }) : null;
 
   const deliver = async (reply: string) => {
@@ -74,7 +81,7 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
     return { reply, toolCalls: [], pending: null, pendingId: null, staff: null };
   }
 
-  const ctx: ToolCtx = { db, now, staff, channel: input.trigger === "whatsapp" ? "whatsapp" : "web" };
+  const ctx: ToolCtx = { db, now, staff, channel: input.trigger === "whatsapp" ? "whatsapp" : "web", conversationId: input.conversationId, attachmentId: input.attachmentId };
   const toolCalls: ToolCallLog[] = [];
   let tokensIn = 0;
   let tokensOut = 0;
@@ -338,8 +345,9 @@ async function llmTurn(db: Db, input: AgentInput, ctx: ToolCtx, log: ToolCallLog
       }
       log.push({ name: call.name, args, result, ms: Date.now() - t0 });
       const serializedResult = JSON.stringify(result);
-      // La memoria ya pagina sus originales: no cortar el JSON ni perder nextOffset.
-      messages.push({ type: "function_call_output", call_id: call.call_id, output: call.name === "consultar_memoria" ? serializedResult : serializedResult.slice(0, 12_000) });
+      // Memoria y extracción ya limitan sus datos: conservar el JSON completo,
+      // incluyendo paginación, campos dudosos y candidatos de unidad.
+      messages.push({ type: "function_call_output", call_id: call.call_id, output: ["consultar_memoria", "consultar_archivo"].includes(call.name) ? serializedResult : serializedResult.slice(0, 12_000) });
     }
   }
 

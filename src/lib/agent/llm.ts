@@ -1,6 +1,6 @@
 import { AsyncLocalStorage } from "node:async_hooks";
 import OpenAI from "openai";
-import type { FunctionTool, Response, ResponseInputItem } from "openai/resources/responses/responses";
+import type { FunctionTool, Response, ResponseInputContent, ResponseInputItem } from "openai/resources/responses/responses";
 import { env } from "@/lib/env";
 
 // Todo el acceso al LLM vive aquí: cambiar de proveedor sólo toca este archivo.
@@ -109,7 +109,7 @@ export async function chat(messages: ChatMessage[], tools: ToolSpec[], model = e
 }
 
 /** Salida estructurada con JSON Schema (modo strict). */
-export async function structured<T>(system: string, user: string, name: string, schema: Record<string, unknown>, model = env.openaiModel): Promise<T> {
+export async function structured<T>(system: string, user: string | ResponseInputContent[], name: string, schema: Record<string, unknown>, model = env.openaiModel): Promise<T> {
   const res = await requestWithinBudget((options) => openai().responses.create({
     ...responseOptions(model),
     input: [
