@@ -119,7 +119,7 @@ export async function runAgent(db: Db, input: AgentInput): Promise<AgentReply> {
         pendingSummary = pending?.summary ?? null;
         if (pendingSummary) reply += `\n\nSigue pendiente esta acción:\n${pendingSummary}\nResponde *SÍ* para ejecutarla o *NO* para cancelarla.`;
       } else {
-        const deadline = started + (input.trigger === "whatsapp" ? 45_000 : 240_000);
+        const deadline = started + 240_000;
         const r = await withModelDeadline(deadline, () => llmTurn(db, input, ctx, toolCalls, persist, pending, incoming?.id));
         reply = r.reply;
         pendingSummary = r.pendingSummary;

@@ -7,7 +7,8 @@ import { attachEvidence } from "@/lib/services/inventory";
 import { sendToPhone } from "@/lib/services/notify";
 import { qtyUnit } from "@/lib/labels";
 
-export const maxDuration = 60;
+// Luna dispone de 240 s; el resto queda para preparar y entregar la respuesta.
+export const maxDuration = 300;
 
 /** Verificación del webhook (Meta → Configuración → Webhooks). */
 export async function GET(req: NextRequest) {

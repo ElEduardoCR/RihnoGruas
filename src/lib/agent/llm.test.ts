@@ -157,21 +157,26 @@ test("Luna Responses integration (offline)", async (t) => {
     assert.match(runs[0].error ?? "", /agotó el tiempo/);
   });
 
-  await t.test("WhatsApp leaves room for delivery within its shorter execution limit", async (t) => {
+  await t.test("WhatsApp gives Luna the same shared four-minute budget as the web", async (t) => {
     const { db, input } = await fixture();
     const phone = "5219990001122";
     await db.update("staff", input.staffId, { phone });
-    const clock = Date.now();
+    let clock = Date.now();
     t.mock.method(Date, "now", () => clock);
     const options: OpenAI.RequestOptions[] = [];
     t.mock.method(Responses.prototype, "create", async (_body: ResponseCreateParamsNonStreaming, requestOptions: OpenAI.RequestOptions) => {
       options.push(requestOptions);
+      if (options.length === 1) {
+        clock += 65_000;
+        return response([reasoning, call("consultar_capacidades", "call_whatsapp_budget")]);
+      }
       return response([answer("Consulta de WhatsApp lista.")]);
     });
     const result = await runAgent(db, { ...input, phone, trigger: "whatsapp", text: "Hola Rhino." });
     assert.equal(result.reply, "Consulta de WhatsApp lista.");
-    assert.equal(options[0].timeout, 45_000);
-    assert.equal(options[0].maxRetries, 0);
+    assert.deepEqual(options.map((option) => option.timeout), [240_000, 175_000]);
+    assert.ok(options.every((option) => option.maxRetries === 0));
+    assert.equal(options[0].signal, options[1].signal);
   });
 
   await t.test("a model write creates only a proposal until explicit confirmation", async (t) => {

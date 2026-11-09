@@ -72,12 +72,13 @@ export interface IncomingMessage {
 }
 
 /** Extrae mensajes entrantes del payload del webhook. */
-export function parseWebhook(payload: unknown): IncomingMessage[] {
+export function parseWebhook(payload: unknown, phoneNumberId = env.waPhoneNumberId): IncomingMessage[] {
   const out: IncomingMessage[] = [];
   const p = payload as {
     entry?: {
       changes?: {
         value?: {
+          metadata?: { phone_number_id?: string };
           contacts?: { wa_id: string; profile?: { name?: string } }[];
           messages?: {
             id: string;
@@ -97,6 +98,9 @@ export function parseWebhook(payload: unknown): IncomingMessage[] {
   for (const entry of p.entry ?? []) {
     for (const change of entry.changes ?? []) {
       const v = change.value;
+      // Una misma app de Meta puede recibir mensajes para varios números.
+      // Con un número configurado, no aceptar mensajes cuyo destino no se pueda verificar.
+      if (phoneNumberId && v?.metadata?.phone_number_id !== phoneNumberId) continue;
       for (const m of v?.messages ?? []) {
         const contact = v?.contacts?.find((c) => c.wa_id === m.from);
         const text =
