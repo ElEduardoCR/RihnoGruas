@@ -6,6 +6,7 @@ import type { WaMessage } from "@/lib/types";
 
 test("conversation memory stays scoped, recoverable and honest (offline)", async (t) => {
   t.mock.method(globalThis, "fetch", async () => { throw new Error("Network forbidden in memory tests"); });
+  t.mock.method(console, "warn", () => {});
   const { env } = await import("@/lib/env");
   const previousKey = env.openaiKey;
   env.openaiKey = "offline-memory-test-key";
@@ -140,5 +141,86 @@ test("conversation memory stays scoped, recoverable and honest (offline)", async
     assert.equal(fresh?.summary_message_count, 3);
     assert.deepEqual(staleResult, fresh);
     assert.match((await f.db.get("agent_conversations", f.conversation.id))?.summary ?? "", /B-4/);
+  });
+
+  await t.test("fallback retries after five minutes, logs only safe reasons and upgrades at the same count", async (t) => {
+    const f = await fixture();
+    const request = await f.add("in", "Consulta privada del aceite DTE25");
+    const at = Date.parse("2026-11-09T17:00:00Z");
+    const log = t.mock.method(console, "warn", () => {});
+    let calls = 0;
+    const model = t.mock.method(Responses.prototype, "create", async () => {
+      if (++calls === 1) throw new Error("credential=FAKE_SECRET body=PRIVATE_REQUEST");
+      return response([{ kind: "solicitud", text: "consulta del aceite DTE25", message_ids: [request.id] }]);
+    });
+    const fallback = await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at) });
+    assert.match(fallback?.summary ?? "", /Memoria sin resumen de IA/);
+    assert.equal(fallback?.summary_message_count, 1);
+    assert.match(JSON.stringify(log.mock.calls[0].arguments), /model_request_failed/);
+    assert.doesNotMatch(JSON.stringify(log.mock.calls[0].arguments), /FAKE_SECRET|PRIVATE_REQUEST|Consulta privada/);
+    assert.deepEqual(await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 299_999) }), fallback);
+    assert.equal(model.mock.callCount(), 1);
+    const recovered = await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 300_000) });
+    assert.doesNotMatch(recovered?.summary ?? "", /Memoria sin resumen de IA/);
+    assert.match(recovered?.summary ?? "", /consulta del aceite DTE25/);
+    assert.equal(recovered?.summary_message_count, 1);
+    assert.equal(model.mock.callCount(), 2);
+    assert.deepEqual(await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 600_000), retryFallback: true }), recovered);
+    assert.equal(model.mock.callCount(), 2, "Explicit retry only bypasses fallback cooldown, not successful cache");
+  });
+
+  await t.test("explicit server retry recovers before cooldown; failed retries renew only their fallback timestamp", async (t) => {
+    const f = await fixture();
+    const request = await f.add("in", "Revisar la ubicación B-4");
+    const at = Date.parse("2026-11-09T18:00:00Z");
+    let calls = 0;
+    const model = t.mock.method(Responses.prototype, "create", async () => {
+      if (++calls < 3) throw new Error("Offline unavailable");
+      return response([{ kind: "solicitud", text: "revisar ubicación B-4", message_ids: [request.id] }]);
+    });
+    await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at) });
+    const failed = await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 1000), retryFallback: true });
+    assert.equal(failed?.summary_updated_at, new Date(at + 1000).toISOString());
+    await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 300_000) });
+    assert.equal(model.mock.callCount(), 2, "Cooldown begins at the most recent failed attempt");
+    const recovered = await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 2000), retryFallback: true });
+    assert.match(recovered?.summary ?? "", /Se solicitó: revisar ubicación B-4/);
+    assert.equal(recovered?.summary_message_count, 1);
+  });
+
+  await t.test("a failed retry cannot overwrite concurrent AI recovery at the same message count", async (t) => {
+    const f = await fixture();
+    const request = await f.add("in", "Revisar aceite DTE25");
+    const at = Date.parse("2026-11-09T19:00:00Z");
+    const initialTimestamp = new Date(at).toISOString();
+    await f.db.update("agent_conversations", f.conversation.id, { summary: "Memoria sin resumen de IA. Extracto anterior.", summary_message_count: 1, summary_updated_at: initialTimestamp });
+    let calls = 0;
+    t.mock.method(Responses.prototype, "create", async () => {
+      if (++calls === 1) throw new Error("Offline retry failed");
+      return response([{ kind: "solicitud", text: "revisar aceite DTE25, resumen recuperado", message_ids: [request.id] }]);
+    });
+    let releaseOld!: () => void;
+    let markStarted!: () => void;
+    const started = new Promise<void>((resolve) => { markStarted = resolve; });
+    const delayed = new Promise<void>((resolve) => { releaseOld = resolve; });
+    const update = f.db.updateWhere.bind(f.db);
+    let writes = 0;
+    t.mock.method(f.db, "updateWhere", async (...args: Parameters<typeof update>) => {
+      if (++writes === 1) {
+        assert.equal(args[3].summary_message_count, 1);
+        assert.equal(args[3].summary_updated_at, initialTimestamp);
+        markStarted();
+        await delayed;
+      }
+      return update(...args);
+    });
+    const old = summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 1000), retryFallback: true });
+    await started;
+    const fresh = await summarizeConversation(f.db, f.staff, f.conversation.id, { now: new Date(at + 2000), retryFallback: true });
+    releaseOld();
+    assert.deepEqual(await old, fresh);
+    assert.equal(fresh?.summary_message_count, 1);
+    assert.equal(fresh?.summary_updated_at, new Date(at + 2000).toISOString());
+    assert.match((await f.db.get("agent_conversations", f.conversation.id))?.summary ?? "", /resumen recuperado/);
   });
 });
