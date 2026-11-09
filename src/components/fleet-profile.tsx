@@ -15,15 +15,13 @@ const SOURCE_SCOPE: Record<ResearchSource["scope"], string> = {
   identification: "Identificación",
 };
 
-function workDescription(plan: MaintenancePlan, sources: ResearchSource[]) {
-  const references = sources.filter((source) => plan.source_ids.includes(source.id));
+function workDescription(plan: MaintenancePlan) {
   return [
     plan.description,
     "Trabajos a revisar:",
     ...plan.tasks.map((task) => `• ${task}`),
-    `Frecuencia de referencia: ${plan.cadence}`,
+    `Frecuencia: ${plan.cadence}`,
     "Validar alcance e intervalos con el manual correspondiente al número de serie y el historial de esta unidad antes del servicio.",
-    ...references.map((source) => `${source.title}: ${source.url}`),
   ].join("\n");
 }
 
@@ -181,7 +179,7 @@ export function FleetResearchPanel({
       <Card id="planes" className="scroll-mt-20">
         <CardHeader
           title="Planes de mantenimiento"
-          subtitle="Trabajos preparados a partir del equipo reportado y las fuentes disponibles."
+          subtitle="Trabajos y checklists preparados para esta unidad."
         />
         <div className="px-5 pt-4 pb-5 sm:px-6 sm:pb-6">
           <p className="mb-4 rounded-2xl bg-canvas p-4 text-[13px] leading-relaxed text-ink-2">
@@ -190,7 +188,6 @@ export function FleetResearchPanel({
           {profile.maintenance_plans.length > 0 ? (
             <div className="grid gap-4 md:grid-cols-2">
               {profile.maintenance_plans.map((plan) => {
-                const sources = profile.sources.filter((source) => plan.source_ids.includes(source.id));
                 const steps = plan.checklist_steps ?? [];
                 const photoCount = steps.reduce((total, step) => total + step.min_photos, 0);
                 return (
@@ -210,21 +207,12 @@ export function FleetResearchPanel({
                       {plan.tasks.map((task, index) => <li key={`${index}-${task}`}>{task}</li>)}
                     </ul>
                     <div className="mt-4 rounded-xl bg-canvas px-3 py-2.5">
-                      <div className="text-[11px] font-medium text-muted">Frecuencia de referencia</div>
+                      <div className="text-[11px] font-medium text-muted">Frecuencia</div>
                       <p className="mt-1 text-[13px] leading-relaxed font-medium text-ink">{plan.cadence}</p>
                       <p className="mt-1.5 text-[11px] leading-relaxed text-muted">
                         {plan.basis === "manufacturer_family" ? "Base: fabricante, para esta familia de equipos. Validar aplicación a la serie." : "Base: plan preliminar. Intervalos pendientes de validar con el manual."}
                       </p>
                     </div>
-                    {sources.length > 0 && (
-                      <div className="mt-3 space-y-1 text-[12px] text-muted">
-                        {sources.map((source) => (
-                          <a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer" className="block break-words underline decoration-line-2 underline-offset-2 hover:text-ink">
-                            {source.title} · {SOURCE_SCOPE[source.scope]}
-                          </a>
-                        ))}
-                      </div>
-                    )}
                     <div className="mt-auto flex flex-wrap gap-2 pt-4">
                       {canEdit && steps.length > 0 && (
                         <Link href={`/checklists/iniciar?unidad=${encodeURIComponent(craneId)}&tipo=mantenimiento&plan=${encodeURIComponent(plan.id)}`} className={buttonClass("primary", "sm")}>
@@ -233,7 +221,7 @@ export function FleetResearchPanel({
                       )}
                       {steps.length > 0 && (
                         <Modal label="Ver checklist" title={plan.title} subtitle="Consulta cada paso y las fotos necesarias antes de programarlo." variant="outline" size="sm" icon={<ClipboardCheck className="size-4" />} wide>
-                          <MaintenanceChecklistPreview plan={plan} sources={profile.sources} />
+                          <MaintenanceChecklistPreview plan={plan} />
                         </Modal>
                       )}
                       {canEdit && (
@@ -245,7 +233,7 @@ export function FleetResearchPanel({
                           size="sm"
                           icon={<CalendarPlus className="size-4" />}
                         >
-                          <MaintenanceForm craneId={craneId} planId={plan.id} mechanics={mechanics} defaults={{ ...defaults, title: plan.title, description: workDescription(plan, profile.sources) }} />
+                          <MaintenanceForm craneId={craneId} planId={plan.id} mechanics={mechanics} defaults={{ ...defaults, title: plan.title, description: workDescription(plan) }} />
                         </Modal>
                       )}
                     </div>

@@ -18,6 +18,7 @@ import { flagText, qtyUnit } from "@/lib/labels";
 import { ToolError } from "./tool-error";
 import { CATALOG_EDIT_TOOLS } from "./catalog-tools";
 import { AGENDA_EDIT_TOOLS } from "./agenda-tools";
+import { INVENTORY_CATALOG_TOOLS } from "./inventory-catalog-tools";
 
 export { ToolError } from "./tool-error";
 
@@ -321,7 +322,7 @@ const consultarAgenda: ReadTool = {
 const consultarInventario: ReadTool = {
   kind: "read",
   name: "consultar_inventario",
-  description: "Existencias del almacén (aceites, filtros, llantas, refacciones, consumibles, herramienta) con mínimo, ubicación y grúas compatibles.",
+  description: "Existencias del almacén (aceites, filtros, llantas, refacciones, consumibles, herramienta) con unidad de consumo, mínimo, costo por unidad, ubicación, notas de presentación y grúas compatibles.",
   parameters: obj({
     buscar: optStr("Texto a buscar (nombre, SKU o categoría) o null"),
     grua: optStr("Sólo artículos que sirven a esta grúa (generales + específicos compatibles), o null"),
@@ -352,6 +353,7 @@ const consultarInventario: ReadTool = {
       compatible_con: s.compatCraneIds.map((id) => cm.get(id)),
       ubicacion: s.location,
       costo_unitario: s.unit_cost,
+      notas: s.notes,
       cambio_contra_entrega: s.requires_return,
     }));
   },
@@ -968,6 +970,7 @@ export const TOOLS: Tool[] = [
   actualizarGrua,
   ...CATALOG_EDIT_TOOLS,
   ...AGENDA_EDIT_TOOLS,
+  ...INVENTORY_CATALOG_TOOLS,
 ];
 
 export function toolsFor(staff: Staff) {

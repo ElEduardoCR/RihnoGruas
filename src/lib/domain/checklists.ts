@@ -14,6 +14,11 @@ import { daysUntil, fmt } from "@/lib/time";
 
 export type DraftItem = Omit<InspectionItem, "id" | "inspection_id" | "created_at">;
 
+/** Omite la nota bibliográfica también en checklists guardados con el texto anterior. */
+export function checklistInstructions(text: string | null): string | null {
+  return text?.replace(" Las fuentes de familia ayudan a preparar la revisión, pero no confirman tolerancias, productos, capacidad ni intervalos de este equipo.", "") ?? null;
+}
+
 // Función (no objeto) para que cada punto tenga sus propios arreglos
 const blank = () => ({
   value_text: null,

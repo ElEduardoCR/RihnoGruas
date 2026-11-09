@@ -55,6 +55,7 @@ const TOOL_LABELS: Record<string, string> = {
   actualizar_grua: "Actualizar datos de la unidad",
   actualizar_cliente: "Actualizar datos del cliente",
   actualizar_articulo: "Actualizar el catálogo de almacén",
+  crear_articulo: "Dar de alta un artículo de almacén",
   actualizar_renta: "Actualizar datos de la renta",
   cancelar_renta: "Cancelar la renta",
   registrar_conteo: "Registrar conteo físico del almacén",

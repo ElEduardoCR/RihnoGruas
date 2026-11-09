@@ -2,13 +2,14 @@ import { Suspense } from "react";
 import Link from "next/link";
 import { notFound } from "next/navigation";
 import { connection } from "next/server";
-import { Bot, Camera, ChevronLeft, ExternalLink, FileText, MapPin, PenLine, Timer, Wrench } from "lucide-react";
+import { Bot, Camera, ChevronLeft, ExternalLink, MapPin, PenLine, Timer, Wrench } from "lucide-react";
 import { getDb } from "@/lib/db";
 import { CHECKLIST_KIND_LABELS, FLAG_LABELS } from "@/lib/labels";
 import { fmt, num } from "@/lib/time";
 import { inspectionLink } from "@/lib/services/notify";
 import { Badge, Card, CardHeader, PageSkeleton, buttonClass, cx } from "@/components/ui";
 import type { InspectionItem } from "@/lib/types";
+import { checklistInstructions } from "@/lib/domain/checklists";
 
 export const metadata = { title: "Revisión" };
 
@@ -93,18 +94,12 @@ async function Report({ params }: { params: Promise<{ id: string }> }) {
                           {it.source === "grua" && <Badge tone="outline">Propio de la grúa</Badge>}
                           {it.requires_manual_confirmation && <Badge tone={it.manual_confirmed ? "green" : "amber"}>{it.manual_confirmed ? "Manual confirmado" : "Manual pendiente"}</Badge>}
                         </div>
-                        {it.source_reason && <div className="mt-0.5 text-[12px] text-rhino-600">{it.source_reason}</div>}
-                        <div className="mt-1 text-[13px] text-muted">{it.instructions}</div>
+                        {it.source !== "plantilla" && it.source_reason && <div className="mt-0.5 text-[12px] text-rhino-600">{it.source_reason}</div>}
+                        <div className="mt-1 text-[13px] text-muted">{checklistInstructions(it.instructions)}</div>
                         {(it.procedure_steps?.length ?? 0) > 0 && (
                           <ol className="mt-3 list-decimal space-y-1.5 pl-5 text-[13px] leading-relaxed text-ink-2">
                             {it.procedure_steps!.map((step, index) => <li key={`${it.id}-procedure-${index}`}>{step}</li>)}
                           </ol>
-                        )}
-                        {(it.reference_label || it.reference_url) && (
-                          <div className="mt-3 rounded-xl bg-canvas px-3 py-2.5 text-[12px] leading-relaxed text-muted">
-                            <div className="flex items-start gap-1.5"><FileText className="mt-0.5 size-3.5 shrink-0" /><span>{it.reference_label ?? "Referencia del procedimiento"}</span></div>
-                            {it.reference_url && <a href={it.reference_url} target="_blank" rel="noopener noreferrer" className="mt-1.5 inline-block font-medium text-rhino-600 underline underline-offset-2">Consultar fuente</a>}
-                          </div>
                         )}
                         <div className="mt-2 flex flex-wrap items-center gap-2 text-[13px]">
                           {it.answered_at ? (

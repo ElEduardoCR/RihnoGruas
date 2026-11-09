@@ -154,7 +154,7 @@ function Intro({
       {maintenance && (
         <div className="mt-5 rounded-2xl border border-warn-mid/30 bg-warn-soft p-4 text-[14px] leading-relaxed text-ink-2">
           <div className="flex items-center gap-2 font-semibold text-ink"><BookOpen className="size-4 shrink-0" /> Manual de esta unidad</div>
-          <p className="mt-2">La guía se preparó con las fuentes del expediente. Antes de intervenir, confirma el manual que corresponde al modelo y número de serie. Si no coincide o falta, deja el primer paso pendiente.</p>
+          <p className="mt-2">Antes de intervenir, confirma el manual que corresponde al modelo y número de serie. Si no coincide o falta, deja el primer paso pendiente.</p>
         </div>
       )}
 
@@ -321,9 +321,6 @@ function Step({
         {item.critical && <span className="rounded-full bg-rhino-500 px-2 py-0.5 text-[11px] font-semibold text-white">CRÍTICO</span>}
       </div>
       <h2 className="mt-2 text-[26px] leading-tight font-semibold">{item.title}</h2>
-      {item.source === "plantilla" && item.procedure_steps.length > 0 && item.source_reason && (
-        <p className="mt-3 rounded-2xl bg-canvas px-4 py-3 text-[12px] leading-relaxed text-muted">{item.source_reason}</p>
-      )}
       {item.source !== "plantilla" && item.source_reason && (
         <div className="mt-3 inline-flex items-center gap-1.5 self-start rounded-full bg-ink px-3 py-1 text-[12px] font-medium text-white">
           <Bot className="size-3.5" /> {item.source === "agente" ? "Rhino lo agregó:" : "Propio de esta grúa:"} {item.source_reason}
@@ -340,12 +337,6 @@ function Step({
             </li>
           ))}
         </ol>
-      )}
-      {item.reference_label && (
-        <div className="mt-3 flex items-start gap-2 text-[12px] leading-relaxed text-muted">
-          <BookOpen className="mt-0.5 size-4 shrink-0" />
-          {item.reference_url ? <a href={item.reference_url} target="_blank" rel="noopener noreferrer" className="underline underline-offset-2">{item.reference_label}</a> : <span>{item.reference_label}</span>}
-        </div>
       )}
 
       {item.requires_manual_confirmation && (

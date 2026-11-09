@@ -113,6 +113,7 @@ async function Inventory({ searchParams }: { searchParams: SP }) {
                       <div className="text-[12px] text-muted">
                         <span className="font-mono">{i.sku}</span> · {i.location}
                       </div>
+                      {i.notes && <p className="mt-1 max-w-xs whitespace-pre-line break-words text-[12px] leading-relaxed text-muted">{i.notes}</p>}
                     </td>
                     <td className="px-3 py-3 text-[13px] text-ink-2">{INVENTORY_CATEGORY_LABELS[i.category]}</td>
                     <td className="px-3 py-3">

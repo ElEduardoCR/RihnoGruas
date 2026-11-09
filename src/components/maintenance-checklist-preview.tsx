@@ -1,8 +1,9 @@
-import { Camera, ChevronDown, ClipboardCheck, FileText } from "lucide-react";
-import type { MaintenancePlan, ResearchSource } from "@/lib/fleet/types";
+import { Camera, ChevronDown, ClipboardCheck } from "lucide-react";
+import type { MaintenancePlan } from "@/lib/fleet/types";
+import { checklistInstructions } from "@/lib/domain/checklists";
 import { Badge } from "./ui";
 
-export function MaintenanceChecklistPreview({ plan, sources }: { plan: MaintenancePlan; sources: ResearchSource[] }) {
+export function MaintenanceChecklistPreview({ plan }: { plan: MaintenancePlan }) {
   const steps = plan.checklist_steps ?? [];
   const photos = steps.reduce((total, step) => total + step.min_photos, 0);
   if (!steps.length) return <p className="text-[14px] text-muted">Este plan todavía no tiene un checklist preparado.</p>;
@@ -19,7 +20,6 @@ export function MaintenanceChecklistPreview({ plan, sources }: { plan: Maintenan
       </p>
       <ol className="space-y-3">
         {steps.map((step, index) => {
-          const references = sources.filter((source) => step.source_ids.includes(source.id));
           return (
             <li key={step.id}>
               <details open={index === 0} className="group overflow-hidden rounded-2xl border border-line">
@@ -36,7 +36,7 @@ export function MaintenanceChecklistPreview({ plan, sources }: { plan: Maintenan
                     {step.requires_manual_confirmation && <Badge tone="amber">Confirmación del manual</Badge>}
                     {step.critical && <Badge tone="red">Punto crítico</Badge>}
                   </div>
-                  <p className="text-[13px] leading-relaxed text-ink-2">{step.instructions}</p>
+                  <p className="text-[13px] leading-relaxed text-ink-2">{checklistInstructions(step.instructions)}</p>
                   {step.procedure_steps.length > 0 && (
                     <ol className="list-decimal space-y-2 pl-4 text-[13px] leading-relaxed text-ink-2">
                       {step.procedure_steps.map((instruction, instructionIndex) => <li key={`${step.id}-instruction-${instructionIndex}`}>{instruction}</li>)}
@@ -53,17 +53,6 @@ export function MaintenanceChecklistPreview({ plan, sources }: { plan: Maintenan
                       ))}
                     </ol>
                   </div>
-                  {(step.reference_locator || references.length > 0) && (
-                    <div className="border-t border-line pt-3 text-[12px] leading-relaxed text-muted">
-                      <div className="mb-1 flex items-center gap-1.5 font-medium"><FileText className="size-3.5" />Referencia del procedimiento</div>
-                      {step.reference_locator && <p className="mb-2">{step.reference_locator}</p>}
-                      {references.map((source) => (
-                        <a key={source.id} href={source.url} target="_blank" rel="noopener noreferrer" className="mt-1 block break-words underline decoration-line-2 underline-offset-2 hover:text-ink">
-                          {source.title}
-                        </a>
-                      ))}
-                    </div>
-                  )}
                 </div>
               </details>
             </li>

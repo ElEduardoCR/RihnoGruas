@@ -1,4 +1,5 @@
 import type { InspectionItem } from "@/lib/types";
+import { checklistInstructions } from "@/lib/domain/checklists";
 
 export interface WizardItem {
   id: string;
@@ -7,8 +8,6 @@ export interface WizardItem {
   instructions: string | null;
   procedure_steps: string[];
   photo_requirements: string[];
-  reference_label: string | null;
-  reference_url: string | null;
   requires_manual_confirmation: boolean;
   manual_confirmed: boolean;
   response_type: InspectionItem["response_type"];
@@ -35,11 +34,9 @@ export function toWizardItem(i: InspectionItem): WizardItem {
     id: i.id,
     section: i.section,
     title: i.title,
-    instructions: i.instructions,
+    instructions: checklistInstructions(i.instructions),
     procedure_steps: i.procedure_steps ?? [],
     photo_requirements: i.photo_requirements ?? [],
-    reference_label: i.reference_label ?? null,
-    reference_url: i.reference_url ?? null,
     requires_manual_confirmation: i.requires_manual_confirmation ?? false,
     manual_confirmed: i.manual_confirmed ?? false,
     response_type: i.response_type,
@@ -51,7 +48,7 @@ export function toWizardItem(i: InspectionItem): WizardItem {
     photo_hint: i.photo_hint,
     critical: i.critical,
     source: i.source,
-    source_reason: i.source_reason,
+    source_reason: i.source === "plantilla" ? null : i.source_reason,
     answered: Boolean(i.answered_at),
     passed: i.passed,
     value_number: i.value_number,
