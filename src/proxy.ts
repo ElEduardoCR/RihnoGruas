@@ -1,8 +1,8 @@
 import { NextResponse, type NextRequest } from "next/server";
 import { createServerClient } from "@supabase/ssr";
 
-// Rutas que no requieren sesión: wizard por token, webhook, crons, login y archivos (validan aparte).
-const PUBLIC = [/^\/login/, /^\/c\//, /^\/api\/whatsapp/, /^\/api\/cron/, /^\/api\/files/];
+// Rutas que no requieren sesión; wizard, webhook, crons y archivos validan su acceso aparte.
+const PUBLIC = [/^\/login/, /^\/(?:privacidad|eliminar-datos)\/?$/, /^\/c\//, /^\/api\/whatsapp/, /^\/api\/cron/, /^\/api\/files/];
 // Requieren sesión pero no perfil de personal
 const ONBOARDING = [/^\/bienvenida/, /^\/cuenta/];
 

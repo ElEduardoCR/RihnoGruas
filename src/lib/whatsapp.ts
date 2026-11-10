@@ -136,6 +136,51 @@ export function parseWebhook(payload: unknown, phoneNumberId = env.waPhoneNumber
   return out;
 }
 
+export interface MessageStatus {
+  messageId: string;
+  status: "sent" | "delivered" | "read" | "failed";
+  timestamp: number;
+  errorCodes: number[];
+}
+
+function objectValue(value: unknown): Record<string, unknown> | null {
+  return value !== null && typeof value === "object" && !Array.isArray(value)
+    ? value as Record<string, unknown>
+    : null;
+}
+
+/** Recibos de Meta limitados a los campos necesarios para comprobar la entrega. */
+export function parseWebhookStatuses(payload: unknown, phoneNumberId = env.waPhoneNumberId): MessageStatus[] {
+  const out: MessageStatus[] = [];
+  const entries = objectValue(payload)?.entry;
+  if (!Array.isArray(entries)) return out;
+  for (const entry of entries) {
+    const changes = objectValue(entry)?.changes;
+    if (!Array.isArray(changes)) continue;
+    for (const change of changes) {
+      const value = objectValue(objectValue(change)?.value);
+      if (phoneNumberId && objectValue(value?.metadata)?.phone_number_id !== phoneNumberId) continue;
+      if (!Array.isArray(value?.statuses)) continue;
+      for (const rawStatus of value.statuses) {
+        const receipt = objectValue(rawStatus);
+        if (!receipt || typeof receipt.id !== "string" || !receipt.id.trim()) continue;
+        const status = receipt.status;
+        if (status !== "sent" && status !== "delivered" && status !== "read" && status !== "failed") continue;
+        const seconds = receipt.timestamp;
+        if (typeof seconds !== "string" || !/^\d+$/.test(seconds)) continue;
+        const timestamp = Number(seconds) * 1000;
+        if (!Number.isSafeInteger(timestamp)) continue;
+        const errorCodes = Array.isArray(receipt.errors)
+          ? receipt.errors.map((error) => objectValue(error)?.code)
+            .filter((code): code is number => typeof code === "number" && Number.isSafeInteger(code) && code >= 0)
+          : [];
+        out.push({ messageId: receipt.id, status, timestamp, errorCodes });
+      }
+    }
+  }
+  return out;
+}
+
 /** Descarga un archivo multimedia enviado por WhatsApp (foto de evidencia). */
 export async function downloadMedia(mediaId: string): Promise<{ bytes: Uint8Array; contentType: string } | null> {
   if (!hasWhatsApp) return null;

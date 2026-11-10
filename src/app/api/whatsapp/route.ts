@@ -1,7 +1,7 @@
 import { after, type NextRequest } from "next/server";
 import { getAdminDb } from "@/lib/db";
 import { env } from "@/lib/env";
-import { downloadMedia, markRead, parseWebhook, verifySignature, type IncomingMessage } from "@/lib/whatsapp";
+import { downloadMedia, markRead, parseWebhook, parseWebhookStatuses, verifySignature, type IncomingMessage } from "@/lib/whatsapp";
 import { findStaffByPhone, runAgent } from "@/lib/agent/run";
 import { attachEvidence } from "@/lib/services/inventory";
 import { sendToPhone } from "@/lib/services/notify";
@@ -30,6 +30,9 @@ export async function POST(req: NextRequest) {
     payload = JSON.parse(raw);
   } catch {
     return new Response("JSON inválido", { status: 400 });
+  }
+  for (const status of parseWebhookStatuses(payload)) {
+    console.info("[whatsapp.status]", JSON.stringify(status));
   }
   const messages = parseWebhook(payload);
   if (messages.length) after(() => Promise.all(messages.map(handle)).then(() => undefined));

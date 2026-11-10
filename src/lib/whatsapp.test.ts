@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { createHmac } from "node:crypto";
 import test from "node:test";
 import { env } from "./env";
-import { markRead, parseWebhook, sendTemplate, sendText, verifySignature } from "./whatsapp";
+import { markRead, parseWebhook, parseWebhookStatuses, sendTemplate, sendText, verifySignature } from "./whatsapp";
 
 const TEST_SECRET = "whatsapp-signature-test-secret";
 const BODY = '{"object":"whatsapp_business_account","entry":[]}';
@@ -82,6 +82,54 @@ test("ignores messages without a verifiable destination when a WhatsApp number i
 test("keeps payloads without metadata readable when no WhatsApp number is configured", () => {
   const payload = { entry: [{ changes: [incomingChange("legacy")] }] };
   assert.deepEqual(parseWebhook(payload, "").map((message) => message.id), ["legacy"]);
+});
+
+const statusChange = (statuses: unknown[], phoneNumberId?: string) => ({
+  field: "messages",
+  value: {
+    ...(phoneNumberId === undefined ? {} : { metadata: { phone_number_id: phoneNumberId } }),
+    statuses,
+  },
+});
+const receipt = (status: string, id = "wamid.receipt") => ({ id, status, timestamp: "1794240000" });
+
+test("extracts delivery states only for the configured number from a mixed webhook", () => {
+  const payload = { entry: [{ changes: [
+    incomingChange("incoming", "rhino-number"),
+    statusChange([receipt("read", "wamid.other")], "other-number"),
+    statusChange([receipt("sent"), receipt("delivered"), receipt("read"), receipt("failed")], "rhino-number"),
+  ] }] };
+  assert.deepEqual(parseWebhookStatuses(payload, "rhino-number"), ["sent", "delivered", "read", "failed"].map((status) => ({
+    messageId: "wamid.receipt", status, timestamp: 1794240000000, errorCodes: [],
+  })));
+});
+
+test("status receipts without verified destination are ignored when a number is configured", () => {
+  const payload = { entry: [{ changes: [statusChange([receipt("delivered")])] }] };
+  assert.deepEqual(parseWebhookStatuses(payload, "rhino-number"), []);
+  assert.equal(parseWebhookStatuses(payload, "").length, 1);
+});
+
+test("status receipts expose only the message ID, state, timestamp and numeric error codes", () => {
+  const payload = { entry: [{ changes: [statusChange([{
+    ...receipt("failed"), recipient_id: "5219990001122", text: "Private message", token: "private-token",
+    errors: [{ code: 131047, title: "Private detail", message: "Private content" }, { code: "131000" }, { code: -1 }, null],
+    conversation: { id: "private-conversation" }, pricing: { category: "service" },
+  }], "rhino-number")] }] };
+  assert.deepEqual(parseWebhookStatuses(payload, "rhino-number"), [{
+    messageId: "wamid.receipt", status: "failed", timestamp: 1794240000000, errorCodes: [131047],
+  }]);
+});
+
+test("ignores malformed status receipts and payloads", () => {
+  for (const payload of [null, [], "invalid", {}, { entry: {} }, { entry: [null, { changes: {} }] }]) {
+    assert.deepEqual(parseWebhookStatuses(payload, "rhino-number"), []);
+  }
+  const invalid = [null, {}, receipt("unknown"), receipt("read", ""), receipt("read", " "),
+    { ...receipt("read"), id: 123 }, { ...receipt("read"), timestamp: "invalid" },
+    { ...receipt("read"), timestamp: "" }, { ...receipt("read"), timestamp: "-1" },
+    { ...receipt("read"), timestamp: "99999999999999999999999" }];
+  assert.deepEqual(parseWebhookStatuses({ entry: [{ changes: [statusChange(invalid, "rhino-number")] }] }, "rhino-number"), []);
 });
 
 test("outbound messages distinguish explicit demo mode from real API acceptance", async (t) => {
